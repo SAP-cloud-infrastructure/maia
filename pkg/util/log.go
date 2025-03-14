@@ -4,12 +4,18 @@
 package util
 
 import (
-	"log"
 	"os"
 	"strings"
+
+	"github.com/sapcc/go-bits/logg"
 )
 
-var isDebug = os.Getenv("MAIA_DEBUG") == "1"
+func init() {
+	// Set debug mode based on environment variable
+	if os.Getenv("MAIA_DEBUG") == "1" {
+		logg.ShowDebug = true
+	}
+}
 
 // LogFatal logs a fatal error and terminates the program.
 func LogFatal(msg string, args ...any) {
@@ -47,8 +53,8 @@ func doLog(msg string, args []any) {
 		}
 	}
 	if len(args) > 0 {
-		log.Printf(msg+"\n", args...)
+		logg.Printf(msg+"\n", args...)
 	} else {
-		log.Println(msg)
+		logg.Println(msg)
 	}
 }
