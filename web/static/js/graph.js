@@ -7,6 +7,14 @@ var graphTemplate;
 
 var SECOND = 1000;
 
+// Native cookie reader to replace js.cookie
+function getCookie(name) {
+  var value = "; " + document.cookie;
+  var parts = value.split("; " + name + "=");
+  if (parts.length === 2) return parts.pop().split(";").shift();
+  return null;
+}
+
 Prometheus.Graph = function(element, options, handleChange, handleRemove) {
   this.el = element;
   this.graphHTML = null;
@@ -201,7 +209,7 @@ Prometheus.Graph.prototype.populateInsertableMetrics = function() {
     "project_id": self.projectIDField.textContent  // Maia enhancement
   };
   var headers = {};
-  var token = Cookies.get("X-Auth-Token");
+  var token = getCookie("X-Auth-Token");
   if (token) {
       headers["X-Auth-Token"] = token
   };
@@ -394,7 +402,7 @@ Prometheus.Graph.prototype.submitQuery = function() {
     "project_id": self.projectIDField.textContent   // Maia enhancement
   };
   var headers = {};
-  var token = Cookies.get("X-Auth-Token");
+  var token = getCookie("X-Auth-Token");
   if (token) {
     headers["X-Auth-Token"] = token
   };
