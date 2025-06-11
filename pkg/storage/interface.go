@@ -53,10 +53,10 @@ const (
 
 // Response encapsulates a generic response of a Prometheus API
 type Response struct {
-	Status    Status        `json:"status"`
-	Data      []interface{} `json:"data,omitempty"`
-	ErrorType ErrorType     `json:"errorType,omitempty"`
-	Error     string        `json:"error,omitempty"`
+	Status    Status    `json:"status"`
+	Data      []any     `json:"data,omitempty"`
+	ErrorType ErrorType `json:"errorType,omitempty"`
+	Error     string    `json:"error,omitempty"`
 }
 
 // SeriesResponse encapsulates a response to the /series API of Prometheus
@@ -76,7 +76,7 @@ type LabelValuesResponse struct {
 // QueryResponse contains the response from a call to query or query_range
 type QueryResponse struct {
 	Status    Status      `json:"status"`
-	Data      QueryResult `json:"data,omitempty"`
+	Data      QueryResult `json:"data"`
 	ErrorType ErrorType   `json:"errorType,omitempty"`
 	Error     string      `json:"error,omitempty"`
 }
@@ -84,7 +84,7 @@ type QueryResponse struct {
 // QueryResult contains the actual result of a query or query_range call
 type QueryResult struct {
 	Type   model.ValueType `json:"resultType"`
-	Result interface{}     `json:"result"`
+	Result any             `json:"result"`
 
 	// The decoded value.
 	Value model.Value

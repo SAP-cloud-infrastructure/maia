@@ -99,7 +99,7 @@ func ReturnResponse(w http.ResponseWriter, response *http.Response) {
 
 // ReturnJSON is a convenience function for HTTP handlers returning JSON data.
 // The `code` argument specifies the HTTP Response code, usually 200.
-func ReturnJSON(w http.ResponseWriter, code int, data interface{}) {
+func ReturnJSON(w http.ResponseWriter, code int, data any) {
 	payload, err := json.Marshal(&data)
 	if err == nil {
 		w.Header().Set("Content-Type", "application/json")

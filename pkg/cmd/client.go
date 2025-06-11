@@ -288,7 +288,7 @@ func printTable(resp *http.Response) {
 func buildColumnSet(promResult model.Value) map[string]bool {
 	result := map[string]bool{}
 	if columns != "" {
-		for _, c := range strings.Split(columns, ",") {
+		for c := range strings.SplitSeq(columns, ",") {
 			result[c] = true
 		}
 	} else if vector, ok := promResult.(model.Vector); ok { //nolint:gocritic
@@ -358,7 +358,7 @@ func printRow(allColumns []string, rec map[string]string) {
 
 func printTemplate(body []byte, tpl string) {
 	t := template.Must(template.New("").Parse(tpl))
-	m := map[string]interface{}{}
+	m := map[string]any{}
 	if err := json.Unmarshal(body, &m); err != nil {
 		panic(err)
 	}

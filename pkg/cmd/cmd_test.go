@@ -23,11 +23,11 @@ type testReporter struct {
 	gomock.TestReporter
 }
 
-func (r testReporter) Errorf(format string, args ...interface{}) {
+func (r testReporter) Errorf(format string, args ...any) {
 	panic(fmt.Errorf(format, args...))
 }
 
-func (r testReporter) Fatalf(format string, args ...interface{}) {
+func (r testReporter) Fatalf(format string, args ...any) {
 	panic(fmt.Errorf(format, args...))
 }
 

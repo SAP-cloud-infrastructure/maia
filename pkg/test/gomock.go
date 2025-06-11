@@ -23,7 +23,7 @@ type HTTPRequestMatcher struct {
 }
 
 // Matches checks for expected headers (precondition) and injects additional ones (postcondition)
-func (m HTTPRequestMatcher) Matches(x interface{}) bool {
+func (m HTTPRequestMatcher) Matches(x any) bool {
 	httpReq, ok := x.(*http.Request)
 	if ok && httpReq != nil {
 		for k, v := range m.ExpectHeader {
@@ -50,7 +50,7 @@ type TimeStringMatcher struct {
 }
 
 // Matches checks whether the string is a valid RFC3339 or Unix timestamp
-func (m TimeStringMatcher) Matches(x interface{}) bool {
+func (m TimeStringMatcher) Matches(x any) bool {
 	timeStr, ok := x.(string)
 	if ok {
 		_, err := time.Parse(time.RFC3339, timeStr)

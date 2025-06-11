@@ -12,7 +12,7 @@ import (
 // ContextMatcher is a custom matcher for contexts
 type ContextMatcher struct{}
 
-func (m ContextMatcher) Matches(x interface{}) bool {
+func (m ContextMatcher) Matches(x any) bool {
 	_, ok := x.(context.Context)
 	return ok
 }

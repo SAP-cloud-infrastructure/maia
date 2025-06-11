@@ -52,7 +52,7 @@ func (e *authenticationError) StatusCode() int {
 }
 
 // NewAuthenticationError creates a new error instance
-func NewAuthenticationError(statusCode int, format string, args ...interface{}) AuthenticationError {
+func NewAuthenticationError(statusCode int, format string, args ...any) AuthenticationError {
 	return &authenticationError{msg: fmt.Sprintf(format, args...), statusCode: statusCode}
 }
 

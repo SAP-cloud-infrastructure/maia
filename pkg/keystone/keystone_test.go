@@ -19,15 +19,15 @@ const (
 	userToken    = "gUUUUUUZjCvLtw2v36P_Nwn23Vkjl9ZIxK27YsVuGp2_bftQI6RfymVTvnLE_wNtrAzEJSg6Xa7Aoe37DgDp2wrryWs3klgSqjC7ecC6RD9hRxSaQsjd7choIjQVdIbZjph4vmhJzg7cPIQd9CT7x12wNKBYwIbAmCDFEX_CIlzmPXBUyeISI-M" //nolint:gosec // not real credential
 )
 
-var serviceAuthBody = map[string]interface{}{
-	"auth": map[string]interface{}{
-		"identity": map[string]interface{}{
-			"methods": []interface{}{
+var serviceAuthBody = map[string]any{
+	"auth": map[string]any{
+		"identity": map[string]any{
+			"methods": []any{
 				"password",
 			},
-			"password": map[string]interface{}{
-				"user": map[string]interface{}{
-					"domain": map[string]interface{}{
+			"password": map[string]any{
+				"user": map[string]any{
+					"domain": map[string]any{
 						"name": "Default",
 					},
 					"name":     "maia",
@@ -35,9 +35,9 @@ var serviceAuthBody = map[string]interface{}{
 				},
 			},
 		},
-		"scope": map[string]interface{}{
-			"project": map[string]interface{}{
-				"domain": map[string]interface{}{
+		"scope": map[string]any{
+			"project": map[string]any{
+				"domain": map[string]any{
 					"name": "Default",
 				},
 				"name": "service",
@@ -45,15 +45,15 @@ var serviceAuthBody = map[string]interface{}{
 		},
 	},
 }
-var userAuthBody = map[string]interface{}{
-	"auth": map[string]interface{}{
-		"identity": map[string]interface{}{
-			"methods": []interface{}{
+var userAuthBody = map[string]any{
+	"auth": map[string]any{
+		"identity": map[string]any{
+			"methods": []any{
 				"password",
 			},
-			"password": map[string]interface{}{
-				"user": map[string]interface{}{
-					"domain": map[string]interface{}{
+			"password": map[string]any{
+				"user": map[string]any{
+					"domain": map[string]any{
 						"name": "testdomain",
 					},
 					"name":     "testuser",
@@ -61,9 +61,9 @@ var userAuthBody = map[string]interface{}{
 				},
 			},
 		},
-		"scope": map[string]interface{}{
-			"project": map[string]interface{}{
-				"domain": map[string]interface{}{
+		"scope": map[string]any{
+			"project": map[string]any{
+				"domain": map[string]any{
 					"name": "testdomain",
 				},
 				"name": "testproject",
@@ -72,15 +72,15 @@ var userAuthBody = map[string]interface{}{
 	},
 }
 
-var userAuthScopeBody = map[string]interface{}{
-	"auth": map[string]interface{}{
-		"identity": map[string]interface{}{
-			"methods": []interface{}{
+var userAuthScopeBody = map[string]any{
+	"auth": map[string]any{
+		"identity": map[string]any{
+			"methods": []any{
 				"password",
 			},
-			"password": map[string]interface{}{
-				"user": map[string]interface{}{
-					"domain": map[string]interface{}{
+			"password": map[string]any{
+				"user": map[string]any{
+					"domain": map[string]any{
 						"name": "testdomain",
 					},
 					"name":     "testuser",
@@ -88,8 +88,8 @@ var userAuthScopeBody = map[string]interface{}{
 				},
 			},
 		},
-		"scope": map[string]interface{}{
-			"project": map[string]interface{}{
+		"scope": map[string]any{
+			"project": map[string]any{
 				"id": "p00001",
 			},
 		},
