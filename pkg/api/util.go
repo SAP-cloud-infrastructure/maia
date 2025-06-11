@@ -315,9 +315,18 @@ func authorizeRules(w http.ResponseWriter, req *http.Request, guessScope bool, r
 
 func requestReauthentication(w http.ResponseWriter) {
 	util.LogDebug("expire cookie and request username/password input")
-	http.SetCookie(w, &http.Cookie{Name: authTokenCookieName, Path: "/", Value: "", MaxAge: -1, Secure: false})
+	http.SetCookie(w, &http.Cookie{
+		Name:     authTokenCookieName,
+		Path:     "/",
+		Value:    "",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
 	w.Header().Set("WWW-Authenticate", "Basic")
 }
+
 func setAuthCookies(req *http.Request, w http.ResponseWriter) {
 	token := req.Header.Get(authTokenHeader)
 	if token == "" {
@@ -332,12 +341,26 @@ func setAuthCookies(req *http.Request, w http.ResponseWriter) {
 		expiry = time.Now().UTC().Add(viper.GetDuration("keystone.token_cache_time"))
 	}
 	// set token cookie
-	http.SetCookie(w, &http.Cookie{Name: authTokenCookieName, Path: "/", Value: token,
-		Expires: expiry.UTC(), Secure: false})
+	http.SetCookie(w, &http.Cookie{
+		Name:     authTokenCookieName,
+		Path:     "/",
+		Value:    token,
+		Expires:  expiry.UTC(),
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
 	// remember domain as cookie so that reauthentication during Prometheus API calls (no domain prefix)
 	// works with plain username and password
-	http.SetCookie(w, &http.Cookie{Name: userDomainCookieName, Path: "/", Value: req.Header.Get(userDomainHeader),
-		MaxAge: 60 * 60 * 24, Secure: false})
+	http.SetCookie(w, &http.Cookie{
+		Name:     userDomainCookieName,
+		Path:     "/",
+		Value:    req.Header.Get(userDomainHeader),
+		MaxAge:   60 * 60 * 24,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
 }
 
 func authorize(wrappedHandlerFunc func(w http.ResponseWriter, req *http.Request), guessScope bool, rule string) func(w http.ResponseWriter, req *http.Request) {
