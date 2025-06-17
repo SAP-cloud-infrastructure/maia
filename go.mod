@@ -12,16 +12,6 @@ require (
 	github.com/prometheus/client_golang v1.22.0
 	github.com/prometheus/common v0.64.0
 	github.com/prometheus/prometheus v0.304.1
-=======
-	github.com/databus23/goslo.policy v0.0.0-20210929125152-81bf2876dbdb
-	github.com/gophercloud/gophercloud/v2 v2.6.0
-	github.com/gorilla/mux v1.8.1
-	github.com/h2non/gock v1.2.0
-	github.com/patrickmn/go-cache v2.1.0+incompatible
-	github.com/prometheus/client_golang v1.21.1
-	github.com/prometheus/common v0.62.0
-	github.com/prometheus/prometheus v0.302.1
->>>>>>> d9e5956 (move log.go to use gobits logg package)
 	github.com/rs/cors v1.11.1
 	github.com/sapcc/go-bits v0.0.0-20250307173044-634e8ce82c05
 	github.com/spf13/cobra v1.9.1
