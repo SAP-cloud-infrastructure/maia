@@ -4,9 +4,10 @@
 package util
 
 import (
-	"log"
 	"os"
 	"strings"
+
+	"log"
 )
 
 var isDebug = os.Getenv("MAIA_DEBUG") == "1"
