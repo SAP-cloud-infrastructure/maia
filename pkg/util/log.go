@@ -7,15 +7,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sapcc/go-bits/logg"
+	"log"
 )
 
-func init() {
-	// Set debug mode based on environment variable
-	if os.Getenv("MAIA_DEBUG") == "1" {
-		logg.ShowDebug = true
-	}
-}
+var isDebug = os.Getenv("MAIA_DEBUG") == "1"
 
 // LogFatal logs a fatal error and terminates the program.
 func LogFatal(msg string, args ...any) {
@@ -53,8 +48,8 @@ func doLog(msg string, args []any) {
 		}
 	}
 	if len(args) > 0 {
-		logg.Printf(msg+"\n", args...)
+		log.Printf(msg+"\n", args...)
 	} else {
-		logg.Println(msg)
+		log.Println(msg)
 	}
 }
