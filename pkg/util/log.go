@@ -48,7 +48,7 @@ func doLog(msg string, args []any) {
 		}
 	}
 	if len(args) > 0 {
-		log.Printf(msg+"\n", args...)
+		log.Print(msg, " ", args)
 	} else {
 		log.Println(msg)
 	}
