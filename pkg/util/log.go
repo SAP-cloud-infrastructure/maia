@@ -47,6 +47,7 @@ func doLog(msg string, args []any) {
 			args[i] = strings.ReplaceAll(strings.ReplaceAll(str, "\n", ""), "\r", "")
 		}
 	}
+	// TODO, replace all of this with go-bits logg package
 	if len(args) > 0 {
 		log.Print(msg, " ", args)
 	} else {
