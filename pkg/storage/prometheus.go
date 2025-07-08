@@ -14,7 +14,7 @@ import (
 
 	"github.com/spf13/viper"
 
-	"github.com/sapcc/maia/pkg/util"
+	"github.com/sapcc/go-bits/logg"
 )
 
 type prometheusStorageClient struct {
@@ -159,7 +159,7 @@ func (promCli *prometheusStorageClient) sendToPrometheus(method, promURL string,
 
 	req, err := http.NewRequestWithContext(context.Background(), method, promURL, body)
 	if err != nil {
-		util.LogError("Could not create request.\n", err.Error())
+		logg.Error("Could not create request.\n", err.Error())
 		return nil, err
 	}
 
@@ -170,11 +170,11 @@ func (promCli *prometheusStorageClient) sendToPrometheus(method, promURL string,
 		req.Header.Add(k, v)
 	}
 
-	util.LogDebug("Forwarding request to API: %s", promURL)
+	logg.Debug("Forwarding request to API: %s", promURL)
 
 	resp, err := promCli.httpClient.Do(req)
 	if err != nil {
-		util.LogError("Request failed.\n%s", err.Error())
+		logg.Error("Request failed.\n%s", err.Error())
 		return nil, err
 	}
 	return resp, nil

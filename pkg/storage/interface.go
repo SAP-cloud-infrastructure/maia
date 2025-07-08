@@ -11,7 +11,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/spf13/viper"
 
-	"github.com/sapcc/maia/pkg/util"
+	"github.com/sapcc/go-bits/logg"
 )
 
 const (
@@ -147,10 +147,10 @@ func NewPrometheusDriver(prometheusAPIURL string, customHeader map[string]string
 	case "prometheus":
 		driver := Prometheus(prometheusAPIURL, customHeader)
 		if driver == nil {
-			util.LogFatal("Couldn't initialize Prometheus storage driver with given endpoint: \"%s\"", prometheusAPIURL)
+			logg.Fatal("Couldn't initialize Prometheus storage driver with given endpoint: \"%s\"", prometheusAPIURL)
 			return nil
 		}
-		util.LogInfo("Using API server at: \"%s\"", prometheusAPIURL)
+		logg.Info("Using API server at: \"%s\"", prometheusAPIURL)
 
 		return driver
 	default:

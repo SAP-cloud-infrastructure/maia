@@ -21,9 +21,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/sapcc/go-bits/logg"
+
 	"github.com/sapcc/maia/pkg/keystone"
 	"github.com/sapcc/maia/pkg/storage"
-	"github.com/sapcc/maia/pkg/util"
 )
 
 const (
@@ -80,7 +81,7 @@ func fetchToken(ctx context.Context) {
 	// default authType of all OpenStack clients is password
 	if authType == "" {
 		authType = "password"
-		util.LogInfo("Authentication type defaults to %s", authType)
+		logg.Info("Authentication type defaults to %s", authType)
 	}
 
 	// ignore any parameters not related to the selected authentication type
@@ -220,7 +221,7 @@ func printValues(resp *http.Response) {
 				panic(fmt.Errorf("unsupported --format value for this command: %s", outputFormat))
 			}
 		} else {
-			util.LogError("Response body: %s", string(body))
+			logg.Error("Response body: %s", string(body))
 			panic(fmt.Errorf("unsupported response type from server: %s", contentType))
 		}
 	}
@@ -276,7 +277,7 @@ func printTable(resp *http.Response) {
 			// This affects /federate aka. metrics only. There is no point in filtering this output
 			fmt.Print(string(body))
 		} else {
-			util.LogWarning("Response body: %s", string(body))
+			logg.Info("WARNING: Response body: %s", string(body))
 			panic(fmt.Errorf("unsupported response type from server: %s", contentType))
 		}
 	}
@@ -467,7 +468,7 @@ func printQueryResponse(resp *http.Response) {
 			panic(fmt.Errorf("unsupported --format value for this command: %s", outputFormat))
 		}
 	default:
-		util.LogWarning("Response body: %s", string(body))
+		logg.Info("WARNING: Response body: %s", string(body))
 		panic(fmt.Errorf("unsupported response type from server: %s", contentType))
 	}
 }

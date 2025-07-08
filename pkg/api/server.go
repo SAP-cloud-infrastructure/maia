@@ -20,10 +20,11 @@ import (
 	"github.com/rs/cors"
 	"github.com/spf13/viper"
 
+	"github.com/sapcc/go-bits/logg"
+
 	"github.com/sapcc/maia/pkg/keystone"
 	"github.com/sapcc/maia/pkg/storage"
 	"github.com/sapcc/maia/pkg/ui"
-	"github.com/sapcc/maia/pkg/util"
 )
 
 var storageInstance storage.Driver
@@ -43,7 +44,7 @@ func Server(ctx context.Context) error {
 	// Initialize global keystone if configured
 	var globalKeystone keystone.Driver
 	if viper.IsSet("keystone.global.auth_url") {
-		util.LogInfo("Initializing global Keystone connection to %s", viper.GetString("keystone.global.auth_url"))
+		logg.Info("Initializing global Keystone connection to %s", viper.GetString("keystone.global.auth_url"))
 		globalKeystone = keystone.NewKeystoneDriverWithSection("global")
 		globalKeystoneInstance = globalKeystone
 	}
@@ -52,7 +53,7 @@ func Server(ctx context.Context) error {
 	mainRouter := setupRouter(keystoneDriver, globalKeystone, storage.NewPrometheusDriver(prometheusAPIURL, map[string]string{}))
 
 	bindAddress := viper.GetString("maia.bind_address")
-	util.LogInfo("listening on %s", bindAddress)
+	logg.Info("listening on %s", bindAddress)
 
 	// enable CORS
 	c := cors.New(cors.Options{
@@ -111,7 +112,7 @@ var validDomain = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 func redirectToDomainRootPage(w http.ResponseWriter, r *http.Request) {
 	domain, ok := mux.Vars(r)["domain"]
 	if !ok || !validDomain.MatchString(domain) {
-		util.LogDebug("Invalid domain: %s", domain)
+		logg.Debug("Invalid domain: %s", domain)
 		redirectToRootPage(w, r)
 		return
 	}
@@ -133,7 +134,7 @@ func redirectToDomainRootPage(w http.ResponseWriter, r *http.Request) {
 		target += "?" + q.Encode()
 	}
 
-	util.LogDebug("Redirecting %s to %s", r.URL.Path, target)
+	logg.Debug("Redirecting %s to %s", r.URL.Path, target)
 	http.Redirect(w, r, target, http.StatusFound)
 }
 
@@ -143,7 +144,7 @@ func redirectToRootPage(w http.ResponseWriter, r *http.Request) {
 	username, _, ok := r.BasicAuth()
 	if ok && strings.Contains(strings.Split(username, "|")[0], "@") {
 		domain = strings.Split(username, "@")[1]
-		util.LogDebug("Username contains domain info. Redirecting to domain %s", domain)
+		logg.Debug("Username contains domain info. Redirecting to domain %s", domain)
 	}
 
 	// Preserve existing query parameters
@@ -160,7 +161,7 @@ func redirectToRootPage(w http.ResponseWriter, r *http.Request) {
 		target += "?" + q.Encode()
 	}
 
-	util.LogDebug("Redirecting to %s", target)
+	logg.Debug("Redirecting to %s", target)
 	http.Redirect(w, r, target, http.StatusFound)
 }
 
@@ -175,14 +176,14 @@ func serveStaticContent(w http.ResponseWriter, req *http.Request) {
 
 	info, err := ui.AssetInfo(fp)
 	if err != nil {
-		util.LogWarning("Could not get file info: %v", err)
+		logg.Info("WARNING: Could not get file info: %v", err)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	file, err := ui.Asset(fp)
 	if err != nil {
 		if !errors.Is(err, io.EOF) {
-			util.LogWarning("Could not get file info: %v", err)
+			logg.Info("WARNING: Could not get file info: %v", err)
 		}
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -198,14 +199,14 @@ func Federate(w http.ResponseWriter, req *http.Request) {
 
 	selectors, err := buildSelectors(req, ks)
 	if err != nil {
-		util.LogInfo("Invalid request params %s", req.URL)
+		logg.Info("Invalid request params %s", req.URL)
 		ReturnPromError(w, err, http.StatusBadRequest)
 		return
 	}
 
 	response, err := storageInstance.Federate(*selectors, req.Header.Get("Accept"))
 	if err != nil {
-		util.LogError("Could not get metrics for %s", selectors)
+		logg.Error("Could not get metrics for %s", selectors)
 		ReturnPromError(w, err, http.StatusServiceUnavailable)
 		return
 	}

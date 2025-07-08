@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/sapcc/go-bits/logg"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -63,6 +64,11 @@ func setDefaultConfig() {
 }
 
 func init() {
+	// Enable debug logging if MAIA_DEBUG environment variable is set
+	if os.Getenv("MAIA_DEBUG") == "1" {
+		logg.ShowDebug = true
+	}
+
 	cobra.OnInitialize(func() {
 		setDefaultConfig()
 	})
