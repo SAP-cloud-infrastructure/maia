@@ -185,7 +185,7 @@ func (t *keystoneToken) ToContext() policy.Context {
 			"application_credential_id":   t.Application.ID,
 			"application_credential_name": t.Application.Name,
 		},
-		Logger: func(format string, args ...interface{}) {
+		Logger: func(format string, args ...any) {
 			logg.Debug(format, args...)
 		},
 	}
