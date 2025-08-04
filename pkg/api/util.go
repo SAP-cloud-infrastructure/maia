@@ -5,6 +5,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,6 +30,14 @@ import (
 )
 
 // utility functionality
+
+// Context keys for request-scoped keystone selection
+type contextKey string
+
+const (
+	keystoneTypeKey     contextKey = "maia.keystone.type"
+	keystoneInstanceKey contextKey = "maia.keystone.instance"
+)
 
 // VersionData is used by version advertisement handlers.
 type VersionData struct {
@@ -369,23 +378,100 @@ func authorize(wrappedHandlerFunc func(w http.ResponseWriter, req *http.Request)
 	guessScope bool, rule string) func(w http.ResponseWriter, req *http.Request) {
 
 	return func(w http.ResponseWriter, req *http.Request) {
-		ks := getKeystoneForRequest(req)
+		// Get keystone from context (secure, race-condition-free approach)
+		ks := getKeystoneFromContext(req.Context())
+		if ks == nil {
+			// Context-based keystone resolution is mandatory for security
+			// All requests must go through keystoneResolutionMiddleware
+			http.Error(w, "Internal server error: keystone context not available", http.StatusInternalServerError)
+			logg.Error("Missing keystone context - request may have bypassed keystoneResolutionMiddleware")
+			return
+		}
 		if authorizeRules(ks, w, req, guessScope, []string{rule}) {
 			wrappedHandlerFunc(w, req)
 		}
 	}
 }
 
-// getKeystoneForRequest returns the keystone driver instance to use for the given request
-func getKeystoneForRequest(r *http.Request) keystone.Driver {
-	// Check if this is a global region request
-	if (r.URL.Query().Get("global") == "true" ||
-		r.Header.Get("X-Global-Region") == "true") &&
-		globalKeystoneInstance != nil {
-		logg.Debug("Using global keystone for request")
-		return globalKeystoneInstance
+// keystoneResolutionMiddleware determines keystone type early and consistently
+// This middleware eliminates race conditions by resolving keystone selection
+// once at the beginning of request processing and storing it in request context.
+func keystoneResolutionMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Determine keystone type early and consistently
+		keystoneType, keystoneDriver := determineKeystoneForRequest(r)
+
+		// Set both type and instance in request context
+		ctx := context.WithValue(r.Context(), keystoneTypeKey, keystoneType)
+		ctx = context.WithValue(ctx, keystoneInstanceKey, keystoneDriver)
+
+		logg.Debug("Request routed to %s keystone", keystoneType)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// determineKeystoneForRequest provides robust keystone determination with validation
+// This function implements the core logic for selecting regional vs global keystone
+// and includes proper error handling for invalid global flags.
+func determineKeystoneForRequest(r *http.Request) (string, keystone.Driver) {
+	// Parse global flag with proper validation
+	isGlobal, err := parseGlobalRequest(r)
+	if err != nil {
+		logg.Error("Invalid global flag in request: %v", err)
+		return "regional", keystoneInstance // Fallback to regional
 	}
-	return keystoneInstance
+
+	if isGlobal && globalKeystoneInstance != nil {
+		return "global", globalKeystoneInstance
+	}
+
+	return "regional", keystoneInstance
+}
+
+// parseGlobalRequest handles robust boolean parsing with multiple formats
+// It supports both URL parameters and headers with proper precedence.
+func parseGlobalRequest(r *http.Request) (bool, error) {
+	// Precedence: URL parameter > Header > default false
+	if param := r.URL.Query().Get("global"); param != "" {
+		return parseBoolean(param, "global parameter")
+	}
+
+	if header := r.Header.Get("X-Global-Region"); header != "" {
+		return parseBoolean(header, "X-Global-Region header")
+	}
+
+	return false, nil
+}
+
+// parseBoolean provides robust boolean parsing with multiple accepted formats
+func parseBoolean(value, source string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "true", "1", "yes", "on":
+		return true, nil
+	case "false", "0", "no", "off", "":
+		return false, nil
+	default:
+		return false, fmt.Errorf("invalid boolean value in %s: '%s'", source, value)
+	}
+}
+
+// getKeystoneFromContext retrieves the keystone instance from request context
+// This is the secure, thread-safe way to get keystone instances throughout request processing.
+func getKeystoneFromContext(ctx context.Context) keystone.Driver {
+	if driver, ok := ctx.Value(keystoneInstanceKey).(keystone.Driver); ok {
+		return driver
+	}
+	// Return nil to indicate context-based keystone not available
+	// Caller should handle fallback logic
+	return nil
+}
+
+// getKeystoneTypeFromContext retrieves the keystone type from request context
+func getKeystoneTypeFromContext(ctx context.Context) string {
+	if keystoneType, ok := ctx.Value(keystoneTypeKey).(string); ok {
+		return keystoneType
+	}
+	return "regional"
 }
 
 func gaugeInflight(handler http.Handler) http.Handler {

@@ -72,6 +72,11 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 	globalKeystoneInstance = globalKeystoneDriver
 
 	mainRouter := mux.NewRouter()
+
+	// Add keystone resolution middleware early in the chain
+	// This prevents race conditions by determining keystone instance once per request
+	mainRouter.Use(keystoneResolutionMiddleware)
+
 	mainRouter.Methods(http.MethodGet).Path("/").HandlerFunc(redirectToRootPage)
 
 	// the API is versioned, other paths are not
@@ -108,6 +113,8 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 
 var validDomain = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
+const trueValue = "true"
+
 // redirectToDomainRootPage will redirect users to the UI start page for their domain
 func redirectToDomainRootPage(w http.ResponseWriter, r *http.Request) {
 	domain, ok := mux.Vars(r)["domain"]
@@ -121,8 +128,8 @@ func redirectToDomainRootPage(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
 	// Check if global flag is set in header but not in query params
-	if r.Header.Get("X-Global-Region") == "true" && q.Get("global") == "" {
-		q.Set("global", "true")
+	if r.Header.Get("X-Global-Region") == trueValue && q.Get("global") == "" {
+		q.Set("global", trueValue)
 	}
 
 	// Encode domain to prevent any potential attacks
@@ -151,8 +158,8 @@ func redirectToRootPage(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
 	// Check if global flag is set in header but not in query params
-	if r.Header.Get("X-Global-Region") == "true" && q.Get("global") == "" {
-		q.Set("global", "true")
+	if r.Header.Get("X-Global-Region") == trueValue && q.Get("global") == "" {
+		q.Set("global", trueValue)
 	}
 
 	// Construct redirect URL with preserved query parameters
@@ -194,8 +201,14 @@ func serveStaticContent(w http.ResponseWriter, req *http.Request) {
 
 // Federate handles GET /federate.
 func Federate(w http.ResponseWriter, req *http.Request) {
-	// Get appropriate keystone for this request
-	ks := getKeystoneForRequest(req)
+	// Get keystone from context (secure, race-condition-free approach)
+	ks := getKeystoneFromContext(req.Context())
+	if ks == nil {
+		// Context-based keystone resolution is mandatory for security
+		logg.Error("Missing keystone context in Federate - request may have bypassed keystoneResolutionMiddleware")
+		ReturnPromError(w, errors.New("keystone context not available"), http.StatusInternalServerError)
+		return
+	}
 
 	selectors, err := buildSelectors(req, ks)
 	if err != nil {
@@ -216,6 +229,13 @@ func Federate(w http.ResponseWriter, req *http.Request) {
 
 // graph returns the Prometheus UI page
 func graph(w http.ResponseWriter, req *http.Request) {
-	ks := getKeystoneForRequest(req)
+	// Get keystone from context (secure, race-condition-free approach)
+	ks := getKeystoneFromContext(req.Context())
+	if ks == nil {
+		// Context-based keystone resolution is mandatory for security
+		logg.Error("Missing keystone context in graph - request may have bypassed keystoneResolutionMiddleware")
+		http.Error(w, "Internal server error: keystone context not available", http.StatusInternalServerError)
+		return
+	}
 	ui.ExecuteTemplate(w, req, "graph.html", ks, nil)
 }

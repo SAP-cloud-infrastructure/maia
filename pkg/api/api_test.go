@@ -369,50 +369,6 @@ func TestGraph_otherOSDomain(t *testing.T) {
 	}.Check(t, router)
 }
 
-func TestGetKeystoneForRequest(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	// Create mock keystones
-	regularKeystone := keystone.NewMockDriver(ctrl)
-	globalKeystone := keystone.NewMockDriver(ctrl)
-
-	// Set global instance for testing
-	keystoneInstance = regularKeystone
-	globalKeystoneInstance = globalKeystone
-
-	// Test cases
-	testCases := []struct {
-		name           string
-		globalParam    string
-		globalHeader   string
-		expectedDriver keystone.Driver
-	}{
-		{"Regular request", "", "", regularKeystone},
-		{"Global param true", "true", "", globalKeystone},
-		{"Global header true", "", "true", globalKeystone},
-		{"Both param and header", "true", "true", globalKeystone},
-		{"Param false", "false", "", regularKeystone},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-			if tc.globalParam != "" {
-				q := req.URL.Query()
-				q.Add("global", tc.globalParam)
-				req.URL.RawQuery = q.Encode()
-			}
-			if tc.globalHeader != "" {
-				req.Header.Set("X-Global-Region", tc.globalHeader)
-			}
-
-			result := getKeystoneForRequest(req)
-			assert.Equal(t, tc.expectedDriver, result)
-		})
-	}
-}
-
 func TestGlobalKeystoneRouting(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -425,7 +381,7 @@ func TestGlobalKeystoneRouting(t *testing.T) {
 	regularKeystone := keystone.NewMockDriver(ctrl)
 	globalKeystone := keystone.NewMockDriver(ctrl)
 
-	// Save original instances
+	// Store instances for restoration
 	originalKeystone := keystoneInstance
 	originalGlobalKeystone := globalKeystoneInstance
 
@@ -433,7 +389,7 @@ func TestGlobalKeystoneRouting(t *testing.T) {
 	keystoneInstance = regularKeystone
 	globalKeystoneInstance = globalKeystone
 
-	// Restore original instances after test
+	// Restore instances after test
 	defer func() {
 		keystoneInstance = originalKeystone
 		globalKeystoneInstance = originalGlobalKeystone
@@ -488,7 +444,7 @@ func TestRedirectPreservesGlobalFlag(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	// Save original instances
+	// Store instances for restoration
 	originalKeystone := keystoneInstance
 	originalGlobalKeystone := globalKeystoneInstance
 
@@ -500,7 +456,7 @@ func TestRedirectPreservesGlobalFlag(t *testing.T) {
 	keystoneInstance = regularKeystone
 	globalKeystoneInstance = globalKeystone
 
-	// Restore original instances after test
+	// Restore instances after test
 	defer func() {
 		keystoneInstance = originalKeystone
 		globalKeystoneInstance = originalGlobalKeystone

@@ -39,7 +39,7 @@ func Keystone() Driver {
 	return &ks
 }
 
-// KeystoneWithSection creates a keystone driver with a specific config section
+// KeystoneWithSection builds a keystone driver using a specific config section
 func KeystoneWithSection(configSection string) Driver {
 	ks := keystone{
 		configSection: configSection,
@@ -101,15 +101,15 @@ func (d *keystone) serviceKeystoneClient(ctx context.Context) (*gophercloud.Serv
 			return nil, err
 		}
 		d.providerClient = client
-		// load the list of all known domains and roles to avoid frequent API calls
-		// changes will not be recognized at runtime
+		// load the list of all domains and roles to avoid frequent API calls
+		// runtime changes are not detected
 		d.loadDomainsAndRoles(ctx)
 	}
 
 	return d.providerClient, nil
 }
 
-// newKeystoneClient creates a new keystone-connection
+// newKeystoneClient establishes a keystone connection
 func newKeystoneClient(ctx context.Context, authOpts gophercloud.AuthOptions) (*gophercloud.ServiceClient, error) {
 	provider, err := openstack.AuthenticatedClient(ctx, authOpts)
 	if err != nil {
@@ -132,7 +132,7 @@ func newKeystoneClient(ctx context.Context, authOpts gophercloud.AuthOptions) (*
 }
 
 // keystoneToken combines all parts of a get-token result into a single struct.
-// It is a replacement for the somewhat annoying need to call
+// It replaces the need to call multiple
 // various Extract...() methods on a GetResult to collect all
 // the bits and pieces
 type keystoneToken struct {
@@ -157,7 +157,7 @@ type keystoneTokenThingInDomain struct {
 	Domain keystoneTokenThing `json:"domain"`
 }
 
-// ToContext transforms our custom keystoneToken structure
+// ToContext converts the keystoneToken structure
 // into a databus23 policy context
 func (t *keystoneToken) ToContext() policy.Context {
 	c := policy.Context{
@@ -237,7 +237,7 @@ func (d *keystone) loadDomainsAndRoles(ctx context.Context) {
 	rolesNames := strings.Split(viper.GetString("keystone.roles"), ",")
 
 	d.monitoringRoles = map[string]string{}
-	// get all known roles and match them with our own list to get the ID
+	// get all roles and match them with our list to get the ID
 	for _, ar := range allRoles.Roles {
 		for _, name := range rolesNames {
 			matched, err := regexp.MatchString(name, ar.Name)
@@ -292,27 +292,52 @@ func (d *keystone) authOptionsFromConfig() gophercloud.AuthOptions {
 	}
 }
 
-// authOpts2StringKey builds a key from an AuthOptions struct for use with the token cache
-func authOpts2StringKey(authOpts gophercloud.AuthOptions) string {
-	// the key of a token is the token itself
+// getAuthURL returns the auth URL for the configured keystone section
+func (d *keystone) getAuthURL() string {
+	section := "keystone"
+	if d.configSection != "" {
+		section = "keystone." + d.configSection
+	}
+	return viper.GetString(section + ".auth_url")
+}
+
+// authOpts2StringKey builds a secure context-aware cache key that prevents collisions
+// between different keystone instances (regional vs global)
+func (d *keystone) authOpts2StringKey(authOpts gophercloud.AuthOptions) string {
+	// Get keystone context for this instance
+	keystoneContext := d.getKeystoneContext()
+
+	// the key of a token is the token itself, but include context for isolation
 	if authOpts.TokenID != "" {
-		return authOpts.TokenID
+		return fmt.Sprintf("%s|CTX:%s", authOpts.TokenID, keystoneContext)
 	}
 
 	// build unique key by separating fields with blanks. Since blanks are not allowed in several of those
 	// the result will be unique
 
+	var baseKey string
 	// for Application Credentials there will be no scope so it can't be used to store the token
 	if authOpts.ApplicationCredentialID != "" || authOpts.ApplicationCredentialName != "" {
-		return authOpts.UserID + " " + authOpts.Username + " " + authOpts.Password + " " + authOpts.DomainID + " " +
+		baseKey = authOpts.UserID + " " + authOpts.Username + " " + authOpts.Password + " " + authOpts.DomainID + " " +
 			authOpts.DomainName + " " + authOpts.ApplicationCredentialID + " " + authOpts.ApplicationCredentialName + " " +
 			authOpts.ApplicationCredentialSecret
+	} else {
+		// for basic authentiation credentials we need to take into account the scoping information as well
+		baseKey = authOpts.UserID + " " + authOpts.Username + " " + authOpts.Password + " " + authOpts.DomainID + " " +
+			authOpts.DomainName + " " + authOpts.Scope.ProjectID + " " + authOpts.Scope.ProjectName + " " +
+			authOpts.Scope.DomainID + " " + authOpts.Scope.DomainName
 	}
 
-	// for basic authentiation credentials we need to take into account the scoping information as well
-	return authOpts.UserID + " " + authOpts.Username + " " + authOpts.Password + " " + authOpts.DomainID + " " +
-		authOpts.DomainName + " " + authOpts.Scope.ProjectID + " " + authOpts.Scope.ProjectName + " " +
-		authOpts.Scope.DomainID + " " + authOpts.Scope.DomainName
+	// Add explicit context to prevent collisions
+	return fmt.Sprintf("%s|CTX:%s", baseKey, keystoneContext)
+}
+
+// getKeystoneContext determines the keystone context for this instance
+func (d *keystone) getKeystoneContext() string {
+	if d.configSection == "" {
+		return "regional"
+	}
+	return d.configSection // "global", etc.
 }
 
 // Authenticate authenticates a non-service user using available authOptionsFromRequest (username+password or token)
@@ -333,15 +358,14 @@ func (d *keystone) AuthenticateRequest(ctx context.Context, r *http.Request, gue
 		return nil, err
 	}
 
-	// if the request does not have a keystone token, then a new token has to be requested on behalf of the client
-	// this must not happen with the connection of the service otherwise wrong credentials will cause reauthentication
-	// of the service user
+	// if the request does not have a keystone token, then a token must be requested on behalf of the client
+	// prevents wrong credentials from causing service user reauthentication
 	policyContext, _, err := d.authenticate(ctx, *authOpts, true, false)
 	if err != nil {
 		return nil, err
 	}
 
-	// the resulting policy Context structure is copied into header fields
+	// policy Context fields are copied into request headers
 	// so that we do not have to add an extra parameter to every function.
 	r.Header.Set("X-User-Id", policyContext.Auth["user_id"])
 	r.Header.Set("X-User-Name", policyContext.Auth["user_name"])
@@ -377,10 +401,10 @@ func (d *keystone) AuthenticateRequest(ctx context.Context, r *http.Request, gue
 // Format: <user>"|"<project> or <user>"|@"<domain>
 // user/project can either be a unique OpenStack ID or a qualified name with domain information, e.g. username"@"domain
 // When guessScope is set to true, the method will try to find a suitible project when the scope is not defined (basic auth. only)
-// Finally you can also specify the scope as URL query param
+// You can also specify the scope as URL query param
 func (d *keystone) authOptionsFromRequest(ctx context.Context, r *http.Request, guessScope bool) (*gophercloud.AuthOptions, AuthenticationError) {
 	ba := gophercloud.AuthOptions{
-		IdentityEndpoint: viper.GetString("keystone.auth_url"),
+		IdentityEndpoint: d.getAuthURL(),
 		AllowReauth:      true,
 	}
 
@@ -398,7 +422,7 @@ func (d *keystone) authOptionsFromRequest(ctx context.Context, r *http.Request, 
 	} else if token := query.Get("x-auth-token"); token != "" {
 		// perfect: we have a token and thus a authorization scope (albeit in lower-case)
 		ba.TokenID = token
-		// move to right place
+		// relocate to header
 		query.Del("x-auth-token")
 		r.Header.Set("X-Auth-Token", ba.TokenID)
 	} else if (appCredID != "" && appCredSecret != "") || (appCredName != "" && appCredUserName != "") {
@@ -415,7 +439,7 @@ func (d *keystone) authOptionsFromRequest(ctx context.Context, r *http.Request, 
 		if len(usernameParts) > 1 {
 			scopeParts = strings.Split(strings.Join(usernameParts[1:], "|"), "@")
 		} else {
-			// default to arbitrary project with sufficient roles after knowing the user
+			// default to arbitrary project with sufficient roles for the user
 			scopeParts = []string{}
 		}
 
@@ -480,7 +504,7 @@ func (d *keystone) authOptionsFromRequest(ctx context.Context, r *http.Request, 
 			}
 		}
 
-		// finally set the password
+		// set the password
 		ba.Password = password
 	} else {
 		return nil, NewAuthenticationError(StatusMissingCredentials, "Authorization header missing (no username/password or token)")
@@ -518,7 +542,7 @@ func (d *keystone) guessScope(ctx context.Context, ba *gophercloud.AuthOptions) 
 		return NewAuthenticationError(StatusNoPermission, "User %s (%s@%s) does not have monitoring authorization on any project in any domain (required roles: %s)", userID, ba.Username, ba.DomainName, viper.GetString("keystone.roles"))
 	}
 
-	// default to first project (note that redundant attributes are not copied here to aovid errors)
+	// default to primary project (note that redundant attributes are not copied here to avoid errors)
 	ba.Scope = &gophercloud.AuthScope{ProjectID: userprojects[0].ProjectID}
 	if ba.Scope.ProjectID == "" {
 		ba.Scope.DomainID = userprojects[0].DomainID
@@ -533,16 +557,22 @@ func (d *keystone) guessScope(ctx context.Context, ba *gophercloud.AuthOptions) 
 // in order to determine the user roles. As a non-service user it will merely request a token from the passed credentials
 // and obtain an endpoint for the Maia service. Both cases will create a token when username and password or OpenStack application
 // credentials are passed in.
-// `rescope` will be set to `true` to indicate that the token passed needs to be used to create a new token
-// because the scope should be changed.
+// `rescope` when `true` indicates that the token passed requires creation of a token
+// because the scope requires modification.
 // It returns the authorization context
 func (d *keystone) authenticate(ctx context.Context, authOpts gophercloud.AuthOptions, asServiceUser, rescope bool) (*policy.Context, string, AuthenticationError) {
+	// Use secure contextual cache key for lookup
+	cacheKey := d.authOpts2StringKey(authOpts)
+
+	// Get keystone context for logging
+	keystoneContext := d.getKeystoneContext()
+
 	// check cache, but ignore the result if tokens are rescoped
-	if entry, found := d.tokenCache.Get(authOpts2StringKey(authOpts)); found && (authOpts.Scope == nil || authOpts.Scope.ProjectID == entry.(*cacheEntry).context.Auth["project_id"]) {
+	if entry, found := d.tokenCache.Get(cacheKey); found && !rescope && (authOpts.Scope == nil || authOpts.Scope.ProjectID == entry.(*cacheEntry).context.Auth["project_id"]) {
 		if authOpts.TokenID != "" {
-			logg.Debug("Token cache hit: token %s... for scope %+v", authOpts.TokenID[:1+len(authOpts.TokenID)/4], authOpts.Scope)
+			logg.Debug("[%s-keystone] Token cache hit: token %s... for scope %+v", keystoneContext, authOpts.TokenID[:1+len(authOpts.TokenID)/4], authOpts.Scope)
 		} else {
-			logg.Debug("Token cache hit: user %s%s and password ***** for scope %+v", authOpts.Username, authOpts.UserID, authOpts.Scope)
+			logg.Debug("[%s-keystone] Token cache hit: user %s%s and password ***** for scope %+v", keystoneContext, authOpts.Username, authOpts.UserID, authOpts.Scope)
 		}
 		return entry.(*cacheEntry).context, entry.(*cacheEntry).endpointURL, nil
 	}
@@ -581,9 +611,9 @@ func (d *keystone) authenticate(ctx context.Context, authOpts gophercloud.AuthOp
 			return nil, "", NewAuthenticationError(StatusNotAvailable, "%s", err.Error())
 		}
 	} else {
-		// no token or changed scoped: need to authenticate user
+		// no token or rescoped: authenticate user
 		logg.Debug("authenticate user %s%s with scope %+v.", authOpts.Username, authOpts.UserID, authOpts.Scope)
-		// create new token from basic authentication credentials or token ID
+		// create token from basic authentication credentials or token ID
 		var tokenID string
 		client, err := openstack.AuthenticatedClient(ctx, authOpts)
 		if client != nil {
@@ -615,9 +645,10 @@ func (d *keystone) authenticate(ctx context.Context, authOpts gophercloud.AuthOp
 			var authErr AuthenticationError
 			ce.context, ce.endpointURL, authErr = d.authenticate(ctx, gophercloud.AuthOptions{IdentityEndpoint: authOpts.IdentityEndpoint, TokenID: tokenID}, asServiceUser, false)
 			if authErr == nil && authOpts.TokenID == "" {
-				// cache basic / application credential authentication results in the same way as token validations
-				logg.Debug("Add cache entry for username %s%s for scope %+v", authOpts.UserID, authOpts.Username, authOpts.Scope)
-				d.tokenCache.Set(authOpts2StringKey(authOpts), &ce, cache.DefaultExpiration)
+				// cache basic and application credential authentication like token validations
+				basicAuthCacheKey := d.authOpts2StringKey(authOpts)
+				logg.Debug("[%s-keystone] Cache entry for username %s%s for scope %+v", keystoneContext, authOpts.UserID, authOpts.Username, authOpts.Scope)
+				d.tokenCache.Set(basicAuthCacheKey, &ce, cache.DefaultExpiration)
 			}
 			return ce.context, ce.endpointURL, authErr
 		}
@@ -652,8 +683,8 @@ func (d *keystone) authenticate(ctx context.Context, authOpts gophercloud.AuthOp
 		endpointURL: endpointURL,
 	}
 
-	logg.Debug("add token cache entry for token %s... for scope %+v", tokenData.Token[:1+len(tokenData.Token)/4], authOpts.Scope)
-	d.tokenCache.Set(authOpts2StringKey(authOpts), &ce, cache.DefaultExpiration)
+	logg.Debug("[%s-keystone] Token cache entry for token %s... for scope %+v", keystoneContext, tokenData.Token[:1+len(tokenData.Token)/4], authOpts.Scope)
+	d.tokenCache.Set(cacheKey, &ce, cache.DefaultExpiration)
 	return &policyContext, endpointURL, nil
 }
 
@@ -713,7 +744,7 @@ func (d *keystone) UserProjects(ctx context.Context, userID string) ([]tokens.Sc
 		return nil, err
 	}
 
-	// cache should be updated at this point
+	// cache contains the results at this point
 	d.userProjectsCache.Set(userID, up, cache.DefaultExpiration)
 	return up, nil
 }

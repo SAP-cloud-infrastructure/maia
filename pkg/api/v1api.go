@@ -4,7 +4,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -37,27 +36,8 @@ func NewV1Handler(keystoneDriver keystone.Driver, storageDriver storage.Driver) 
 		storage:  storageDriver,
 	}
 
-	// Update to wrap handlers with middleware that selects the appropriate keystone
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			// Get appropriate keystone for this request
-			ks := getKeystoneForRequest(req)
-
-			// Create provider with selected keystone
-			provider := &v1Provider{
-				keystone: ks,
-				storage:  storageDriver,
-			}
-
-			// Store in request context
-			type contextKey string
-			const providerKey contextKey = "provider"
-
-			// Use the custom typed key instead of string literal
-			ctx := context.WithValue(req.Context(), providerKey, provider)
-			next.ServeHTTP(w, req.WithContext(ctx))
-		})
-	})
+	// Note: Keystone resolution is handled by keystoneResolutionMiddleware at router level
+	// This eliminates race conditions by ensuring consistent keystone selection throughout request lifecycle
 
 	// tenant-aware query
 	r.Methods(http.MethodGet).Path("/query").HandlerFunc(authorize(
@@ -78,7 +58,15 @@ func NewV1Handler(keystoneDriver keystone.Driver, storageDriver storage.Driver) 
 }
 
 func (p *v1Provider) Query(w http.ResponseWriter, req *http.Request) {
-	labelKey, labelValue := scopeToLabelConstraint(req, p.keystone)
+	// Get keystone from context (secure, race-condition-free approach)
+	ks := getKeystoneFromContext(req.Context())
+	if ks == nil {
+		// Context-based keystone resolution is mandatory for security
+		ReturnPromError(w, errors.New("keystone context not available"), http.StatusInternalServerError)
+		return
+	}
+
+	labelKey, labelValue := scopeToLabelConstraint(req, ks)
 
 	queryParams := req.URL.Query()
 	newQuery, err := util.AddLabelConstraintToExpression(queryParams.Get("query"), labelKey, labelValue)
@@ -97,7 +85,15 @@ func (p *v1Provider) Query(w http.ResponseWriter, req *http.Request) {
 }
 
 func (p *v1Provider) QueryRange(w http.ResponseWriter, req *http.Request) {
-	labelKey, labelValue := scopeToLabelConstraint(req, p.keystone)
+	// Get keystone from context (secure, race-condition-free approach)
+	ks := getKeystoneFromContext(req.Context())
+	if ks == nil {
+		// Context-based keystone resolution is mandatory for security
+		ReturnPromError(w, errors.New("keystone context not available"), http.StatusInternalServerError)
+		return
+	}
+
+	labelKey, labelValue := scopeToLabelConstraint(req, ks)
 
 	queryParams := req.URL.Query()
 	newQuery, err := util.AddLabelConstraintToExpression(queryParams.Get("query"), labelKey, labelValue)
@@ -119,15 +115,23 @@ func (p *v1Provider) QueryRange(w http.ResponseWriter, req *http.Request) {
 // This is a complex operation.
 func (p *v1Provider) LabelValues(w http.ResponseWriter, req *http.Request) {
 	name := model.LabelName(mux.Vars(req)["name"])
-	// do not list label values from series older than maia.label_value_ttl
+	// exclude label values from series that exceed maia.label_value_ttl age limit
 	ttl, err := time.ParseDuration(viper.GetString("maia.label_value_ttl"))
 	if err != nil {
 		ReturnPromError(w, errors.New("invalid Maia configuration (maia.label_value_ttl)"), http.StatusInternalServerError)
 		return
 	}
 
+	// Get keystone from context (secure, race-condition-free approach)
+	ks := getKeystoneFromContext(req.Context())
+	if ks == nil {
+		// Context-based keystone resolution is mandatory for security
+		ReturnPromError(w, errors.New("keystone context not available"), http.StatusInternalServerError)
+		return
+	}
+
 	// build project_id constraint using project hierarchy
-	labelKey, labelValues := scopeToLabelConstraint(req, p.keystone)
+	labelKey, labelValues := scopeToLabelConstraint(req, ks)
 	// make a broad range query and aggregate by requested label. Use count() as cheap aggregation function.
 	query, err := util.AddLabelConstraintToExpression("count({"+string(name)+"!=\"\"}) BY ("+string(name)+")", labelKey, labelValues)
 	if err != nil {
@@ -136,7 +140,7 @@ func (p *v1Provider) LabelValues(w http.ResponseWriter, req *http.Request) {
 
 	start := time.Now().Add(-ttl)
 	end := time.Now()
-	// choose step-size so long that only two values are returned (oldest and latest)
+	// select step-size to return only two values (minimum and maximum)
 	step := viper.GetString("maia.label_value_ttl")
 	resp, err := p.storage.QueryRange(query, start.Format(time.RFC3339), end.Format(time.RFC3339), step, "", req.Header.Get("Accept"))
 	if err != nil {
@@ -179,7 +183,15 @@ func (p *v1Provider) LabelValues(w http.ResponseWriter, req *http.Request) {
 }
 
 func (p *v1Provider) Series(w http.ResponseWriter, req *http.Request) {
-	selectors, err := buildSelectors(req, p.keystone)
+	// Get keystone from context (secure, race-condition-free approach)
+	ks := getKeystoneFromContext(req.Context())
+	if ks == nil {
+		// Context-based keystone resolution is mandatory for security
+		ReturnPromError(w, errors.New("keystone context not available"), http.StatusInternalServerError)
+		return
+	}
+
+	selectors, err := buildSelectors(req, ks)
 	if err != nil {
 		ReturnPromError(w, err, http.StatusBadRequest)
 		return

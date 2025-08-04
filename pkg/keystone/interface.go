@@ -27,6 +27,11 @@ const (
 	StatusInternalError = 5
 )
 
+const (
+	// KeystoneDriverName is the name used to identify the keystone authentication driver
+	KeystoneDriverName = "keystone"
+)
+
 // AuthenticationError extends the error interface with a status code
 type AuthenticationError interface {
 	// error - embedding breaks mockgen
@@ -61,7 +66,7 @@ func NewAuthenticationError(statusCode int, format string, args ...any) Authenti
 // can be mocked away in unit tests.
 type Driver interface {
 	// AuthenticateRequest authenticates a user using authOptionsFromRequest passed in the HTTP request header.
-	// After successful authentication, additional context information is added to the request header
+	// On successful authentication, additional context information is added to the request header
 	// In addition a Context object is returned for policy evaluation.
 	// When guessScope is set to true, the method will try to find a suitible project when the scope is not defined (basic auth. only)
 	AuthenticateRequest(ctx context.Context, req *http.Request, guessScope bool) (*policy.Context, AuthenticationError)
@@ -85,7 +90,7 @@ type Driver interface {
 func NewKeystoneDriver() Driver {
 	driverName := viper.GetString("maia.auth_driver")
 	switch driverName {
-	case "keystone":
+	case KeystoneDriverName:
 		return Keystone()
 	default:
 		panic(fmt.Errorf("couldn't match a keystone driver for configured value \"%s\"", driverName))
@@ -96,7 +101,7 @@ func NewKeystoneDriver() Driver {
 func NewKeystoneDriverWithSection(configSection string) Driver {
 	driverName := viper.GetString("maia.auth_driver")
 	switch driverName {
-	case "keystone":
+	case KeystoneDriverName:
 		return KeystoneWithSection(configSection)
 	default:
 		panic(fmt.Errorf("couldn't match a keystone driver for configured value \"%s\"", driverName))
