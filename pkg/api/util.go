@@ -31,7 +31,9 @@ import (
 
 // utility functionality
 
-// Context keys for request-scoped keystone selection
+// contextKey is a custom type to prevent collisions with other packages
+// that might use string keys in context.Context. This is a Go best practice
+// that ensures our keystone selection context keys remain isolated.
 type contextKey string
 
 const (

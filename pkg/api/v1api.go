@@ -58,10 +58,8 @@ func NewV1Handler(keystoneDriver keystone.Driver, storageDriver storage.Driver) 
 }
 
 func (p *v1Provider) Query(w http.ResponseWriter, req *http.Request) {
-	// Get keystone from context (secure, race-condition-free approach)
 	ks := getKeystoneFromContext(req.Context())
 	if ks == nil {
-		// Context-based keystone resolution is mandatory for security
 		ReturnPromError(w, errors.New("keystone context not available"), http.StatusInternalServerError)
 		return
 	}
@@ -85,10 +83,8 @@ func (p *v1Provider) Query(w http.ResponseWriter, req *http.Request) {
 }
 
 func (p *v1Provider) QueryRange(w http.ResponseWriter, req *http.Request) {
-	// Get keystone from context (secure, race-condition-free approach)
 	ks := getKeystoneFromContext(req.Context())
 	if ks == nil {
-		// Context-based keystone resolution is mandatory for security
 		ReturnPromError(w, errors.New("keystone context not available"), http.StatusInternalServerError)
 		return
 	}
@@ -122,10 +118,8 @@ func (p *v1Provider) LabelValues(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Get keystone from context (secure, race-condition-free approach)
 	ks := getKeystoneFromContext(req.Context())
 	if ks == nil {
-		// Context-based keystone resolution is mandatory for security
 		ReturnPromError(w, errors.New("keystone context not available"), http.StatusInternalServerError)
 		return
 	}
@@ -183,10 +177,8 @@ func (p *v1Provider) LabelValues(w http.ResponseWriter, req *http.Request) {
 }
 
 func (p *v1Provider) Series(w http.ResponseWriter, req *http.Request) {
-	// Get keystone from context (secure, race-condition-free approach)
 	ks := getKeystoneFromContext(req.Context())
 	if ks == nil {
-		// Context-based keystone resolution is mandatory for security
 		ReturnPromError(w, errors.New("keystone context not available"), http.StatusInternalServerError)
 		return
 	}

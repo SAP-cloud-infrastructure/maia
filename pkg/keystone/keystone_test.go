@@ -334,6 +334,11 @@ func TestKeystoneContext(t *testing.T) {
 }
 
 // TestCacheIsolationWithContextualKeys verifies cache isolation between contexts
+// Security Isolation Tests
+// NOTE: These tests intentionally use explicit setup rather than loops/iterators
+// to ensure complete isolation between regional and global keystone contexts.
+// The duplication validates that no shared state or cache leakage can occur
+// between different keystone instances - a critical security requirement.
 func TestCacheIsolationWithContextualKeys(t *testing.T) {
 	defer gock.Off()
 

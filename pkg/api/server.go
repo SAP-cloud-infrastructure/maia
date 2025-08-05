@@ -113,6 +113,8 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 
 var validDomain = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
+// trueValue is required by golangci-lint when string literals appear 5+ times
+// Alternative would be multiple //nolint:goconst annotations which is messier
 const trueValue = "true"
 
 // redirectToDomainRootPage will redirect users to the UI start page for their domain
