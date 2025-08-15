@@ -401,7 +401,12 @@ func authorize(wrappedHandlerFunc func(w http.ResponseWriter, req *http.Request)
 func keystoneResolutionMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Determine keystone type early and consistently
-		keystoneType, keystoneDriver := determineKeystoneForRequest(r)
+		keystoneType, keystoneDriver, err := determineKeystoneForRequest(r)
+		if err != nil {
+			logg.Error("Keystone resolution failed: %v", err)
+			http.Error(w, fmt.Sprintf("Configuration error: %v", err), http.StatusServiceUnavailable)
+			return
+		}
 
 		// Set both type and instance in request context
 		ctx := context.WithValue(r.Context(), keystoneTypeKey, keystoneType)
@@ -415,19 +420,21 @@ func keystoneResolutionMiddleware(next http.Handler) http.Handler {
 // determineKeystoneForRequest provides robust keystone determination with validation
 // This function implements the core logic for selecting regional vs global keystone
 // and includes proper error handling for invalid global flags.
-func determineKeystoneForRequest(r *http.Request) (string, keystone.Driver) {
+func determineKeystoneForRequest(r *http.Request) (string, keystone.Driver, error) {
 	// Parse global flag with proper validation
 	isGlobal, err := parseGlobalRequest(r)
 	if err != nil {
-		logg.Error("Invalid global flag in request: %v", err)
-		return "regional", keystoneInstance // Fallback to regional
+		return "", nil, fmt.Errorf("invalid global parameter: %w", err)
 	}
 
-	if isGlobal && globalKeystoneInstance != nil {
-		return "global", globalKeystoneInstance
+	if isGlobal {
+		if globalKeystoneInstance == nil {
+			return "", nil, errors.New("global keystone requested but not configured")
+		}
+		return "global", globalKeystoneInstance, nil
 	}
 
-	return "regional", keystoneInstance
+	return "regional", keystoneInstance, nil
 }
 
 // parseGlobalRequest handles robust boolean parsing with multiple formats
