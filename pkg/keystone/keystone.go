@@ -689,16 +689,23 @@ func (d *keystone) authenticate(ctx context.Context, authOpts gophercloud.AuthOp
 }
 
 func (d *keystone) ChildProjects(ctx context.Context, projectID string) ([]string, error) {
+	keystoneContext := d.getKeystoneContext()
+	logg.Debug("[CHILD_PROJECTS_DEBUG] [%s-keystone] ChildProjects called for project: %s", keystoneContext, projectID)
+
 	if ce, ok := d.projectTreeCache.Get(projectID); ok {
-		return ce.([]string), nil
+		cached := ce.([]string)
+		logg.Debug("[CHILD_PROJECTS_DEBUG] [%s-keystone] Cache hit for %s: %v", keystoneContext, projectID, cached)
+		return cached, nil
 	}
 
+	logg.Debug("[CHILD_PROJECTS_DEBUG] [%s-keystone] Cache miss for %s, fetching from keystone", keystoneContext, projectID)
 	childprojects, err := d.fetchChildProjects(ctx, projectID)
 	if err != nil {
-		logg.Error("Unable to obtain project tree of project %s: %s", projectID, err.Error())
+		logg.Error("[CHILD_PROJECTS_DEBUG] [%s-keystone] Unable to obtain project tree of project %s: %s", keystoneContext, projectID, err.Error())
 		return nil, err
 	}
 
+	logg.Debug("[CHILD_PROJECTS_DEBUG] [%s-keystone] Fetched child projects for %s: %v", keystoneContext, projectID, childprojects)
 	d.projectTreeCache.Set(projectID, childprojects, cache.DefaultExpiration)
 	return childprojects, nil
 }

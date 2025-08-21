@@ -154,16 +154,25 @@ func ReturnPromError(w http.ResponseWriter, err error, code int) {
 
 func scopeToLabelConstraint(req *http.Request, keystoneDriver keystone.Driver) (string, []string) { //nolint:gocritic
 	ctx := req.Context()
+	logg.Debug("[SCOPE_DEBUG] Starting scope resolution")
+
 	if projectID := req.Header.Get("X-Project-Id"); projectID != "" {
+		logg.Debug("[SCOPE_DEBUG] Found X-Project-Id: %s", projectID)
 		children, err := keystoneDriver.ChildProjects(ctx, projectID)
 		if err != nil {
+			logg.Error("[SCOPE_DEBUG] ChildProjects failed for %s: %v", projectID, err)
 			panic(err)
 		}
-		return "project_id", append([]string{projectID}, children...)
+		logg.Debug("[SCOPE_DEBUG] ChildProjects for %s returned: %v", projectID, children)
+		allProjects := append([]string{projectID}, children...)
+		logg.Debug("[SCOPE_DEBUG] Final project list: %v", allProjects)
+		return "project_id", allProjects
 	} else if domainID := req.Header.Get("X-Domain-Id"); domainID != "" {
+		logg.Debug("[SCOPE_DEBUG] Found X-Domain-Id: %s", domainID)
 		return "domain_id", []string{domainID}
 	}
 
+	logg.Error("[SCOPE_DEBUG] No X-Project-Id or X-Domain-Id found in headers")
 	panic(errors.New("missing OpenStack scope attributes in request header"))
 }
 
@@ -400,6 +409,12 @@ func authorize(wrappedHandlerFunc func(w http.ResponseWriter, req *http.Request)
 // once at the beginning of request processing and storing it in request context.
 func keystoneResolutionMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// DEBUG: Log incoming request details
+		logg.Debug("[KEYSTONE_DEBUG] Processing request: %s %s", r.Method, r.URL.Path)
+		logg.Debug("[KEYSTONE_DEBUG] X-Project-Id header: %s", r.Header.Get("X-Project-Id"))
+		logg.Debug("[KEYSTONE_DEBUG] X-Auth-Token present: %t", r.Header.Get("X-Auth-Token") != "")
+		logg.Debug("[KEYSTONE_DEBUG] Global param: %s", r.URL.Query().Get("global"))
+
 		// Determine keystone type early and consistently
 		keystoneType, keystoneDriver, err := determineKeystoneForRequest(r)
 		if err != nil {
@@ -412,7 +427,7 @@ func keystoneResolutionMiddleware(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), keystoneTypeKey, keystoneType)
 		ctx = context.WithValue(ctx, keystoneInstanceKey, keystoneDriver)
 
-		logg.Debug("Request routed to %s keystone", keystoneType)
+		logg.Debug("[KEYSTONE_DEBUG] Request routed to %s keystone", keystoneType)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

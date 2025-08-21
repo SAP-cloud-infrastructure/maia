@@ -13,6 +13,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/common/model"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/spf13/viper"
 
 	"github.com/sapcc/maia/pkg/keystone"
@@ -67,14 +68,21 @@ func (p *v1Provider) Query(w http.ResponseWriter, req *http.Request) {
 	labelKey, labelValue := scopeToLabelConstraint(req, ks)
 
 	queryParams := req.URL.Query()
-	newQuery, err := util.AddLabelConstraintToExpression(queryParams.Get("query"), labelKey, labelValue)
+	originalQuery := queryParams.Get("query")
+	logg.Debug("[QUERY_DEBUG] Original query: %s", originalQuery)
+	logg.Debug("[QUERY_DEBUG] Label constraint: %s = %v", labelKey, labelValue)
+
+	newQuery, err := util.AddLabelConstraintToExpression(originalQuery, labelKey, labelValue)
 	if err != nil {
+		logg.Error("[QUERY_DEBUG] Query modification failed: %v", err)
 		ReturnPromError(w, err, http.StatusBadRequest)
 		return
 	}
 
+	logg.Debug("[QUERY_DEBUG] Modified query: %s", newQuery)
 	resp, err := p.storage.Query(newQuery, queryParams.Get("time"), queryParams.Get("timeout"), req.Header.Get("Accept"))
 	if err != nil {
+		logg.Error("[QUERY_DEBUG] Storage query failed: %v", err)
 		ReturnPromError(w, err, http.StatusServiceUnavailable)
 		return
 	}
