@@ -134,6 +134,13 @@ func TestEarlyKeystoneResolution(t *testing.T) {
 			expectedType:   "regional",
 			expectedDriver: regionalKeystone,
 		},
+		{
+			name:           "Empty global param should be false",
+			url:            "/api/v1/query?global=",
+			headers:        nil,
+			expectedType:   "regional",
+			expectedDriver: regionalKeystone,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -143,7 +150,11 @@ func TestEarlyKeystoneResolution(t *testing.T) {
 				req.Header.Set(k, v)
 			}
 
-			keystoneType, keystoneDriver := determineKeystoneForRequest(req)
+			keystoneType, keystoneDriver, err := determineKeystoneForRequest(req)
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
 
 			if keystoneType != tc.expectedType {
 				t.Errorf("Expected keystone type %s, got %s", tc.expectedType, keystoneType)
@@ -175,12 +186,6 @@ func TestInvalidBooleanHandling(t *testing.T) {
 			headers:      map[string]string{"X-Global-Region": "invalid"},
 			expectedType: "regional",
 		},
-		{
-			name:         "Empty global param should be false",
-			url:          "/api/v1/query?global=",
-			headers:      nil,
-			expectedType: "regional",
-		},
 	}
 
 	for _, tc := range testCases {
@@ -190,10 +195,15 @@ func TestInvalidBooleanHandling(t *testing.T) {
 				req.Header.Set(k, v)
 			}
 
-			keystoneType, _ := determineKeystoneForRequest(req)
+			keystoneType, _, err := determineKeystoneForRequest(req)
 
-			if keystoneType != tc.expectedType {
-				t.Errorf("Expected keystone type %s on error, got %s", tc.expectedType, keystoneType)
+			// For invalid boolean values, we now expect an error
+			if err == nil {
+				t.Errorf("Expected error for invalid boolean value, got none")
+			}
+
+			if keystoneType != "" {
+				t.Errorf("Expected empty keystone type on error, got %s", keystoneType)
 			}
 		})
 	}
@@ -380,6 +390,39 @@ func TestParseBooleanFormats(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestGlobalKeystoneUnavailable(t *testing.T) {
+	// Test case: global=1 when globalKeystoneInstance is nil
+	originalGlobal := globalKeystoneInstance
+	defer func() { globalKeystoneInstance = originalGlobal }()
+
+	globalKeystoneInstance = nil // Simulate missing global config
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/query?global=1", http.NoBody)
+
+	// Should return error, not silent fallback
+	keystoneType, keystoneDriver, err := determineKeystoneForRequest(req)
+
+	if err == nil {
+		t.Error("Expected error when global keystone unavailable, got none")
+	}
+
+	if keystoneType != "" || keystoneDriver != nil {
+		t.Error("Should not return keystone when error occurs")
+	}
+
+	// Test middleware returns HTTP 503
+	recorder := httptest.NewRecorder()
+	middleware := keystoneResolutionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("Should not reach handler when keystone resolution fails")
+	}))
+
+	middleware.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Errorf("Expected HTTP 503, got %d", recorder.Code)
 	}
 }
 
