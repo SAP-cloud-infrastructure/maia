@@ -22,6 +22,7 @@ SPDX-License-Identifier = "Apache-2.0"
 [[annotations]]
 path = [
   "build/*.txt",
+  "build/*.out",
   "etc/*.conf",
   "etc/*.json",
   "pkg/*/fixtures/*.json",

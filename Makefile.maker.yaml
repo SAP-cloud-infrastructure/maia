@@ -37,6 +37,7 @@ reuse:
   annotations:
     - paths:
       - build/*.txt
+      - build/*.out
       - etc/*.conf
       - etc/*.json
       - pkg/*/fixtures/*.json
