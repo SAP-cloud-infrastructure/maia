@@ -45,6 +45,7 @@ If you don't use OpenStack, you can still use Maia CLI as a feature-complete she
 * Feature-complete CLI supporting all API operations
 * JSON and Go-template-based output for reliable automation
 * Works with Prometheus, too (no OpenStack required)
+* **Global region support** via `--global` flag for querying metrics from virtual/global regions
 
 ## Installation
 
@@ -66,6 +67,24 @@ Binary releases for Linux and MacOS can be downloaded from the GitHub _releases_
 Maia can be used via Web-UI or CLI.
 
 Enter `maia --help` to see a list of commands and options.
+
+### Global Region Support
+
+The Maia CLI supports querying metrics from global/virtual regions using the `--global` flag:
+
+```bash
+# Query metrics from the regional backend (default)
+maia query "up"
+
+# Query metrics from the global backend
+maia query "up" --global
+
+# Compare metrics between regional and global
+maia series --selector="job=prometheus"           # Regional
+maia series --selector="job=prometheus" --global  # Global
+```
+
+**Note**: The `--global` flag requires that the Maia server is configured with global keystone support. The CLI uses the same environment variables (OS_USERNAME, OS_PASSWORD, etc.) for both regional and global queries - the flag simply tells the server which backend keystone to use.
 
 Please refer to the [Maia user guide](./docs/users-guide.md) for more instructions.
 

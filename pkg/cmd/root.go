@@ -16,6 +16,7 @@ import (
 var configFile string
 var promURL string
 var version = "1.0.7"
+var useGlobalKeystone bool
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
@@ -75,4 +76,5 @@ func init() {
 
 	RootCmd.PersistentFlags().StringVarP(&configFile, "config-file", "", "/etc/maia/maia.conf", "Configuration file to use")
 	RootCmd.PersistentFlags().Bool("version", false, "Print version information and quit")
+	RootCmd.PersistentFlags().BoolVar(&useGlobalKeystone, "global", false, "Use global keystone backend for metrics queries")
 }

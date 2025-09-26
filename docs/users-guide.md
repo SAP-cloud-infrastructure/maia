@@ -18,6 +18,7 @@ SPDX-License-Identifier: Apache-2.0
 * Feature-complete CLI supporting all API operations
 * JSON and Go-template-based output for reliable automation
 * Works with Prometheus, too (no OpenStack required)
+* Global region support via `--global` flag
 
 ## Using the Maia UI
 
@@ -139,6 +140,7 @@ The `maia` command can also be used to retrieve metrics from the Maia service. I
 | --os-domain-name | OS_DOMAIN_NAME | OpenStack domain name for authorization scoping to domain |
 | --os-domain-id | OS_DOMAIN_ID | OpenStack domain unique ID for authorization scoping to domain |
 | --os-auth-url | OS_AUTH_URL | Endpoint of the Identity v3 service. Needed to authentication and Maia endpoint lookup |
+| --global | - | Use global keystone backend for metrics queries |
 | --os-auth-type | OS_AUTH_TYPE | Authentication method to use: one of `password`, `token`, `v3applicationcredential`|
 
 Usually, you can reuse your existing RC-files. For performance reasons, you should consider token-based
@@ -272,6 +274,53 @@ maia snapshot --selector 'job="endpoints"' ...
 
 If you want to preprocess/filter data further, you can e.g. use the [prom2json](https://github.com/prometheus/prom2json)
 tool together with [jq](https://github.com/stedolan/jq).
+
+### Global Region Support
+
+The Maia CLI supports querying metrics from global/virtual regions using the `--global` flag. This flag signals the Maia server to use the global keystone backend instead of the regional one.
+
+**How it works**: The CLI uses the same environment variables (OS_USERNAME, OS_PASSWORD, etc.) to authenticate with the Maia service, regardless of whether you're querying regional or global metrics. The `--global` flag tells the Maia server which backend (regional or global keystone) to use for validating your credentials and retrieving metrics. The server handles the routing between its configured regional and global keystone instances.
+
+#### Examples
+
+```bash
+# Set up standard authentication (same for both regional and global)
+export OS_AUTH_URL="https://identity.myopenstack.net/v3/"
+export OS_USERNAME="myuser"
+export OS_PASSWORD="mypassword"
+export OS_PROJECT_NAME="myproject"
+export OS_PROJECT_DOMAIN_NAME="mydomain"
+
+# Query metrics from the regional backend (default)
+maia query "up"
+maia series --selector="job=prometheus"
+maia snapshot
+
+# Query metrics from the global backend
+maia query "up" --global
+maia series --selector="job=prometheus" --global
+maia snapshot --global
+
+# Compare metrics between regional and global backends
+echo "Regional metrics:"
+maia metric-names | wc -l
+
+echo "Global metrics:"
+maia metric-names --global | wc -l
+
+# Get specific label values from global backend
+maia label-values instance --global
+```
+
+#### Error Handling
+
+If the Maia server is not configured with global keystone support, you will receive an error:
+
+```
+Error: global keystone backend unavailable: global keystone requested but not configured
+```
+
+This typically means the server needs to be configured with a `[keystone.global]` section in its configuration file.
 
 ### Use Maia Client with Prometheus
 

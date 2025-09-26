@@ -165,11 +165,21 @@ func storageInstance() storage.Driver {
 	if storageDriver == nil {
 		switch {
 		case promURL != "":
-			storageDriver = storage.NewPrometheusDriver(promURL, map[string]string{})
+			// For direct Prometheus connections, prepare headers including global flag if needed
+			headers := map[string]string{}
+			if useGlobalKeystone {
+				headers["X-Global-Region"] = "true"
+			}
+			storageDriver = storage.NewPrometheusDriver(promURL, headers)
 		case auth.IdentityEndpoint != "":
 			// authenticate and set maiaURL if missing
 			fetchToken(ctx)
-			storageDriver = storage.NewPrometheusDriver(maiaURL, map[string]string{"X-Auth-Token": auth.TokenID})
+			// For Maia connections, prepare headers including auth token and global flag if needed
+			headers := map[string]string{"X-Auth-Token": auth.TokenID}
+			if useGlobalKeystone {
+				headers["X-Global-Region"] = "true"
+			}
+			storageDriver = storage.NewPrometheusDriver(maiaURL, headers)
 		default:
 			panic(errors.New("either --os-auth-url or --prometheus-url need to be specified"))
 		}
@@ -644,6 +654,30 @@ func checkResponse(err error, resp *http.Response) {
 	if err != nil {
 		panic(err)
 	} else if resp.StatusCode != http.StatusOK {
+		// Error handling for HTTP 503 (Service Unavailable)
+		if resp.StatusCode == http.StatusServiceUnavailable {
+			defer resp.Body.Close()
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				// Include context about global flag if set
+				if useGlobalKeystone {
+					panic(fmt.Errorf("global keystone backend unavailable (HTTP %d) - failed to read response body: %w", resp.StatusCode, err))
+				}
+				panic(fmt.Errorf("service unavailable (HTTP %d) - failed to read response body: %w", resp.StatusCode, err))
+			}
+			if len(body) > 0 {
+				// Include context about global flag if set
+				if useGlobalKeystone {
+					panic(fmt.Errorf("global keystone backend unavailable: %s", string(body)))
+				}
+				panic(fmt.Errorf("service unavailable: %s", string(body)))
+			}
+			// Fall back to generic message if no body
+			if useGlobalKeystone {
+				panic(fmt.Errorf("global keystone backend unavailable (HTTP %d)", resp.StatusCode))
+			}
+			panic(fmt.Errorf("service unavailable (HTTP %d)", resp.StatusCode))
+		}
 		panic(fmt.Errorf("server failed with status: %s (%d)", resp.Status, resp.StatusCode))
 	}
 }

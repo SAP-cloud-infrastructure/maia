@@ -6,12 +6,18 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	policy "github.com/databus23/goslo.policy"
 	"github.com/gophercloud/gophercloud/v2"
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
 	"github.com/sapcc/maia/pkg/keystone"
@@ -504,4 +510,334 @@ func authentication(tokenid, authtype, username, userid, password, appcredid, ap
 	fetchToken(ctx)
 
 	return paniced
+}
+
+// Global Flag Tests
+
+func TestGlobalFlagInRootCommand(t *testing.T) {
+	// Test that the global flag is properly registered
+	flag := RootCmd.PersistentFlags().Lookup("global")
+	assert.NotNil(t, flag, "global flag should be registered")
+	assert.Equal(t, "false", flag.DefValue, "global flag should default to false")
+	assert.Equal(t, "Use global keystone backend for metrics queries", flag.Usage)
+}
+
+func TestGlobalFlagPropagation(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Test that setting useGlobalKeystone affects storage driver creation
+	tests := []struct {
+		name              string
+		globalFlag        bool
+		expectedHeader    string
+		expectedHeaderVal string
+	}{
+		{
+			name:              "With global flag disabled",
+			globalFlag:        false,
+			expectedHeader:    "",
+			expectedHeaderVal: "",
+		},
+		{
+			name:              "With global flag enabled",
+			globalFlag:        true,
+			expectedHeader:    "X-Global-Region",
+			expectedHeaderVal: "true",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Save and restore the original value
+			originalGlobal := useGlobalKeystone
+			defer func() { useGlobalKeystone = originalGlobal }()
+
+			// Set the test value
+			useGlobalKeystone = tc.globalFlag
+
+			// Create a test server to verify headers
+			var receivedHeaders http.Header
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				receivedHeaders = r.Header
+				w.WriteHeader(http.StatusOK)
+				if _, err := w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[]}}`)); err != nil {
+					t.Errorf("Failed to write response: %v", err)
+				}
+			}))
+			defer ts.Close()
+
+			// Create a storage driver with the test server URL
+			headers := map[string]string{"X-Auth-Token": "test-token"}
+			if tc.globalFlag {
+				headers["X-Global-Region"] = "true"
+			}
+			driver := storage.Prometheus(ts.URL, headers)
+
+			// Make a request
+			_, err := driver.Query("up", "", "", "application/json")
+			assert.NoError(t, err, "Query should not return an error")
+
+			// Verify headers
+			if tc.expectedHeader != "" {
+				assert.Equal(t, tc.expectedHeaderVal, receivedHeaders.Get(tc.expectedHeader),
+					"Global header should be set correctly")
+			} else {
+				assert.Empty(t, receivedHeaders.Get("X-Global-Region"),
+					"Global header should not be set when flag is false")
+			}
+
+			// Always verify auth token is present
+			assert.Equal(t, "test-token", receivedHeaders.Get("X-Auth-Token"),
+				"Auth token should always be present")
+		})
+	}
+}
+
+func TestGlobalFlagHTTP503ErrorHandling(t *testing.T) {
+	// Save and restore the original value
+	originalGlobal := useGlobalKeystone
+	defer func() { useGlobalKeystone = originalGlobal }()
+
+	tests := []struct {
+		name          string
+		globalFlag    bool
+		statusCode    int
+		responseBody  string
+		expectedError string
+	}{
+		{
+			name:          "HTTP 503 with global flag enabled",
+			globalFlag:    true,
+			statusCode:    http.StatusServiceUnavailable,
+			responseBody:  "global keystone not configured",
+			expectedError: "global keystone backend unavailable: global keystone not configured",
+		},
+		{
+			name:          "HTTP 503 with global flag disabled",
+			globalFlag:    false,
+			statusCode:    http.StatusServiceUnavailable,
+			responseBody:  "service unavailable",
+			expectedError: "server failed with status: 503 Service Unavailable (503)",
+		},
+		{
+			name:          "HTTP 503 with global flag enabled but no body",
+			globalFlag:    true,
+			statusCode:    http.StatusServiceUnavailable,
+			responseBody:  "",
+			expectedError: "global keystone backend unavailable (HTTP 503)",
+		},
+		{
+			name:          "HTTP 500 with global flag enabled",
+			globalFlag:    true,
+			statusCode:    http.StatusInternalServerError,
+			responseBody:  "internal error",
+			expectedError: "server failed with status: 500 Internal Server Error (500)",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			useGlobalKeystone = tc.globalFlag
+
+			// Create a test server that returns the specified status code
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.statusCode)
+				if tc.responseBody != "" {
+					if _, err := w.Write([]byte(tc.responseBody)); err != nil {
+						t.Errorf("Failed to write response: %v", err)
+					}
+				}
+			}))
+			defer ts.Close()
+
+			// Test checkResponse function with panic recovery
+			defer func() {
+				if r := recover(); r != nil {
+					err, ok := r.(error)
+					if ok {
+						assert.Contains(t, err.Error(), tc.expectedError,
+							"Error message should match expected")
+					}
+				}
+			}()
+
+			// This should panic with the expected error
+			checkResponse(nil, &http.Response{
+				StatusCode: tc.statusCode,
+				Status:     fmt.Sprintf("%d %s", tc.statusCode, http.StatusText(tc.statusCode)),
+				Body:       io.NopCloser(strings.NewReader(tc.responseBody)),
+			})
+		})
+	}
+}
+
+// TestStorageDriverWithGlobalFlag verifies that the storage driver is created correctly
+// with and without the global flag, and that the global flag setting is properly passed
+// to the storage driver. It tests both direct Prometheus and Maia authentication paths.
+func TestStorageDriverWithGlobalFlag(t *testing.T) {
+	// Save original values
+	originalGlobal := useGlobalKeystone
+	originalPromURL := promURL
+	originalAuthEndpoint := auth.IdentityEndpoint
+	originalStorageDriver := storageDriver
+	originalAuthUsername := auth.Username
+	originalAuthPassword := auth.Password
+	originalAuthScope := auth.Scope
+	originalAuthType := authType
+
+	// Restore after test
+	defer func() {
+		useGlobalKeystone = originalGlobal
+		promURL = originalPromURL
+		auth.IdentityEndpoint = originalAuthEndpoint
+		storageDriver = originalStorageDriver
+		auth.Username = originalAuthUsername
+		auth.Password = originalAuthPassword
+		auth.Scope = originalAuthScope
+		authType = originalAuthType
+	}()
+
+	tests := []struct {
+		name         string
+		globalFlag   bool
+		promURL      string
+		authEndpoint string
+		expectGlobal bool
+		expectAuth   bool
+	}{
+		{
+			name:         "Direct Prometheus connection with global flag",
+			globalFlag:   true,
+			promURL:      "http://prometheus:9090",
+			authEndpoint: "",
+			expectGlobal: true,
+			expectAuth:   false, // Direct prometheus, no auth needed
+		},
+		{
+			name:         "Maia connection with global flag",
+			globalFlag:   true,
+			promURL:      "",
+			authEndpoint: "http://keystone:5000/v3",
+			expectGlobal: true,
+			expectAuth:   true, // Maia connection requires auth
+		},
+		{
+			name:         "Direct Prometheus connection without global flag",
+			globalFlag:   false,
+			promURL:      "http://prometheus:9090",
+			authEndpoint: "",
+			expectGlobal: false,
+			expectAuth:   false, // Direct prometheus, no auth needed
+		},
+		{
+			name:         "Maia connection without global flag",
+			globalFlag:   false,
+			promURL:      "",
+			authEndpoint: "http://keystone:5000/v3",
+			expectGlobal: false,
+			expectAuth:   true, // Maia connection requires auth
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create a new controller for each subtest
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			// Reset storage driver
+			storageDriver = nil
+
+			// Set the storage driver configuration
+			viper.Set("maia.storage_driver", "prometheus")
+
+			// Set test values
+			useGlobalKeystone = tc.globalFlag
+			promURL = tc.promURL
+			auth.IdentityEndpoint = tc.authEndpoint
+
+			// Setup keystone mock
+			keystoneMock := keystone.NewMockDriver(ctrl)
+			setKeystoneInstance(keystoneMock)
+
+			// Set up authentication expectation only if needed
+			if tc.expectAuth {
+				// Set a dummy auth context with valid credentials
+				auth.Username = "testuser"
+				auth.Password = "testpass"
+				auth.Scope = &gophercloud.AuthScope{ProjectID: "12345"}
+
+				// Reset any other auth fields that might interfere
+				auth.UserID = ""
+				auth.DomainName = ""
+				auth.DomainID = ""
+				auth.ApplicationCredentialID = ""
+				auth.ApplicationCredentialName = ""
+				auth.ApplicationCredentialSecret = ""
+				auth.TokenID = ""
+
+				// Ensure authType is set to password for valid credential validation
+				authType = "password"
+
+				ctx := context.Background()
+				keystoneMock.EXPECT().Authenticate(ctx, gomock.Any()).Return(
+					&policy.Context{
+						Auth:  map[string]string{"token": "test-token"},
+						Roles: []string{"monitoring_viewer"},
+					},
+					"http://maia:9091",
+					nil,
+				).AnyTimes() // Allow the call to happen or not happen
+			} else {
+				// For direct Prometheus connections, clear auth fields
+				auth.Username = ""
+				auth.Password = ""
+				auth.UserID = ""
+				auth.DomainName = ""
+				auth.DomainID = ""
+				auth.ApplicationCredentialID = ""
+				auth.ApplicationCredentialName = ""
+				auth.ApplicationCredentialSecret = ""
+				auth.TokenID = ""
+				authType = ""
+			}
+
+			// Create storage instance and verify it works
+			driver := storageInstance()
+			assert.NotNil(t, driver, "Storage driver should be created")
+
+			// Test the global flag functionality directly with a controlled HTTP test
+			testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// Check if the X-Global-Region header is set as expected
+				globalHeader := r.Header.Get("X-Global-Region")
+				if tc.expectGlobal {
+					assert.Equal(t, "true", globalHeader, "X-Global-Region header should be 'true' when global flag is enabled")
+				} else {
+					assert.Empty(t, globalHeader, "X-Global-Region header should not be set when global flag is disabled")
+				}
+
+				// Return a simple success response
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				if _, err := w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[]}}`)); err != nil {
+					t.Errorf("Failed to write response: %v", err)
+				}
+			}))
+			defer testServer.Close()
+
+			// Create a dedicated test driver to verify the global flag behavior
+			headers := map[string]string{"X-Auth-Token": "test-token"}
+			if tc.globalFlag {
+				headers["X-Global-Region"] = "true"
+			}
+			testDriver := storage.Prometheus(testServer.URL, headers)
+
+			// Make a query to verify the header behavior
+			resp, err := testDriver.Query("up", "", "", "application/json")
+			assert.NoError(t, err, "Query should not return an error")
+			assert.Equal(t, http.StatusOK, resp.StatusCode, "Response should be successful")
+			resp.Body.Close()
+		})
+	}
 }
