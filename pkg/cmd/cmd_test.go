@@ -617,8 +617,8 @@ func TestGlobalFlagHTTP503ErrorHandling(t *testing.T) {
 			name:          "HTTP 503 with global flag disabled",
 			globalFlag:    false,
 			statusCode:    http.StatusServiceUnavailable,
-			responseBody:  "service unavailable",
-			expectedError: "server failed with status: 503 Service Unavailable (503)",
+			responseBody:  "service temporarily unavailable",
+			expectedError: "service unavailable: service temporarily unavailable",
 		},
 		{
 			name:          "HTTP 503 with global flag enabled but no body",
@@ -626,6 +626,13 @@ func TestGlobalFlagHTTP503ErrorHandling(t *testing.T) {
 			statusCode:    http.StatusServiceUnavailable,
 			responseBody:  "",
 			expectedError: "global keystone backend unavailable (HTTP 503)",
+		},
+		{
+			name:          "HTTP 503 with global flag disabled and no body",
+			globalFlag:    false,
+			statusCode:    http.StatusServiceUnavailable,
+			responseBody:  "",
+			expectedError: "service unavailable (HTTP 503)",
 		},
 		{
 			name:          "HTTP 500 with global flag enabled",
