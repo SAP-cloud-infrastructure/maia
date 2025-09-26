@@ -679,9 +679,7 @@ func TestGlobalFlagHTTP503ErrorHandling(t *testing.T) {
 	}
 }
 
-// TestStorageDriverWithGlobalFlag verifies that the storage driver is created correctly
-// with and without the global flag, and that the global flag setting is properly passed
-// to the storage driver. It tests both direct Prometheus and Maia authentication paths.
+// TestStorageDriverWithGlobalFlag checks storage driver creation and global flag handling across authentication paths.
 func TestStorageDriverWithGlobalFlag(t *testing.T) {
 	// Save original values
 	originalGlobal := useGlobalKeystone
