@@ -512,7 +512,7 @@ func authentication(tokenid, authtype, username, userid, password, appcredid, ap
 	return paniced
 }
 
-// Global Flag Tests
+// Global flag tests
 
 func TestGlobalFlagInRootCommand(t *testing.T) {
 	// Test that the global flag is properly registered
