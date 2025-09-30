@@ -61,14 +61,6 @@ export OS_USER_DOMAIN_NAME="mydomain"
 export OS_IDENTITY_API_VERSION=3
 ```
 
-**Using OpenStack RC Files**: If you have an RC file from your OpenStack dashboard:
-
-```bash
-# Source the RC file (typically downloaded from dashboard: API Access section)
-source ~/Downloads/myproject-openrc.sh
-# Enter your password when prompted
-```
-
 **Verify authentication works**:
 ```bash
 # This should succeed if credentials are correct
