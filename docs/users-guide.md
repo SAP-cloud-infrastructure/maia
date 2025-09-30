@@ -6,19 +6,143 @@ SPDX-License-Identifier: Apache-2.0
 
 # Maia Users Guide
 
-[Maia UI](#using-the-maia-ui)
+**Table of Contents**
 
-* Prometheus expression browser adapted to Maia
-* Browse projects and metrics
-* Perform ad-hoc PromQL queries
-* Graph metrics
+* [Quick Start](#quick-start) - Get started in 5 minutes
+* [Maia UI](#using-the-maia-ui) - Prometheus expression browser
+* [Maia CLI](#using-the-maia-client) - Command-line interface
+* [Troubleshooting](#troubleshooting) - Common issues and solutions
 
-[Maia CLI](#using-the-maia-client)
+## Quick Start
 
-* Feature-complete CLI supporting all API operations
-* JSON and Go-template-based output for reliable automation
-* Works with Prometheus, too (no OpenStack required)
-* Global region support via `--global` flag
+Get started with Maia CLI in 5 minutes. This guide helps you run your first query against the Maia metrics service.
+
+### Prerequisites
+
+Before using Maia CLI, ensure you have:
+
+1. **OpenStack Account**: Access to an OpenStack environment with Maia deployed
+2. **Project Access**: Membership in at least one OpenStack project
+3. **Required Role**: The `monitoring_viewer` or `monitoring_admin` role on your project
+4. **Maia Binary**: Download from [GitHub releases](https://github.com/sapcc/maia/releases) or build from source
+
+**Check if you have the required role**:
+```bash
+openstack role assignment list --user <your-username> --project <your-project>
+```
+
+**Check if Maia is available in your region**:
+```bash
+openstack catalog list | grep maia
+# Or check endpoints directly
+openstack endpoint list --service maia
+```
+
+### Step 1: Set Up Authentication
+
+Maia uses standard OpenStack authentication. Set these environment variables with your credentials:
+
+```bash
+# Required: Identity service endpoint
+export OS_AUTH_URL="https://identity.myregion.cloud.sap/v3"
+
+# Required: Your credentials
+export OS_USERNAME="myusername"
+export OS_PASSWORD="mypassword"
+
+# Required: Project scope
+export OS_PROJECT_NAME="myproject"
+export OS_PROJECT_DOMAIN_NAME="mydomain"
+
+# Required: User domain (often same as project domain)
+export OS_USER_DOMAIN_NAME="mydomain"
+
+# Optional but recommended: Specify API version
+export OS_IDENTITY_API_VERSION=3
+```
+
+**Using OpenStack RC Files**: If you have an RC file from your OpenStack dashboard:
+
+```bash
+# Source the RC file (typically downloaded from dashboard: API Access section)
+source ~/Downloads/myproject-openrc.sh
+# Enter your password when prompted
+```
+
+**Verify authentication works**:
+```bash
+# This should succeed if credentials are correct
+openstack token issue
+```
+
+### Step 2: List Available Metrics
+
+Once authenticated, query Maia to see what metrics are available:
+
+```bash
+maia metric-names
+```
+
+**Expected output**: A list of metric names like:
+```
+openstack_compute_instances_gauge
+openstack_compute_stuck_instances_count_gauge
+limes_project_quota
+prometheus_http_requests_total
+...
+```
+
+**If this fails**, see the [Troubleshooting](#troubleshooting) section below.
+
+### Step 3: Query a Metric
+
+Run a simple PromQL query to get current metric values:
+
+```bash
+# Query which services are up
+maia query 'up'
+
+# Query OpenStack compute instances
+maia query 'openstack_compute_instances_gauge'
+
+# Get results as a formatted table
+maia query 'up' --format table
+```
+
+### Step 4: Explore Your Data
+
+```bash
+# List all time series for a metric
+maia series --selector='openstack_compute_instances_gauge'
+
+# Get current snapshot of all metrics
+maia snapshot
+
+# Find all values for a label
+maia label-values job
+```
+
+### Next Steps
+
+- Read the [Maia CLI](#using-the-maia-client) section for detailed command documentation
+- Learn about [Global Region Support](#global-region-support) for multi-region queries
+- Explore [Output Formatting](#output-formatting) options for automation
+- Set up [Grafana integration](#using-maia-with-grafana) for dashboards
+
+### Performance Tip: Use Token Authentication
+
+For better performance when making multiple queries, generate a token once and reuse it:
+
+```bash
+# Generate token (valid for ~1 hour by default)
+export OS_TOKEN=$(openstack token issue -c id -f value)
+
+# Now queries are faster (no repeated authentication)
+maia metric-names
+maia query 'up'
+```
+
+---
 
 ## Using the Maia UI
 
@@ -417,3 +541,234 @@ scrape_configs:
 Prometheus' targets page ( Status -> Targets ) should the new job and the endpoint with `State UP`.
 The `Error` column should be empty.
 It might indicate a failed authorization (`401 Unauthorized`).
+
+---
+
+## Troubleshooting
+
+This section covers common issues when using the Maia CLI and their solutions.
+
+### Authentication Failures
+
+#### Error: "You are not authorized to perform the requested action"
+
+**Cause**: Your user account does not have the required `monitoring_viewer` or `monitoring_admin` role on the project.
+
+**Solution**:
+
+1. Check your current role assignments:
+   ```bash
+   openstack role assignment list --user $OS_USERNAME --project $OS_PROJECT_NAME
+   ```
+
+2. If the role is missing, contact your OpenStack administrator to request the `monitoring_viewer` role.
+
+3. Verify the role was added:
+   ```bash
+   openstack role assignment list --user $OS_USERNAME --project $OS_PROJECT_NAME | grep monitoring
+   ```
+
+#### Error: "Authentication failed" or "401 Unauthorized"
+
+**Cause**: Invalid credentials, wrong domain, or incorrect authentication parameters.
+
+**Solution**:
+
+1. Verify your credentials work with the OpenStack CLI:
+   ```bash
+   openstack token issue
+   ```
+
+2. Check that your domains are correct:
+   ```bash
+   # User domain and project domain must match your actual setup
+   echo "User Domain: $OS_USER_DOMAIN_NAME"
+   echo "Project Domain: $OS_PROJECT_DOMAIN_NAME"
+   ```
+
+3. Common domain issues:
+   - If you're getting "default domain" errors, explicitly set domains:
+     ```bash
+     export OS_USER_DOMAIN_NAME="your-actual-domain"
+     export OS_PROJECT_DOMAIN_NAME="your-actual-domain"
+     ```
+   - Domain names are case-sensitive
+
+4. If using application credentials, ensure the format is correct:
+   ```bash
+   export OS_AUTH_TYPE=v3applicationcredential
+   export OS_APPLICATION_CREDENTIAL_ID="your-app-cred-id"
+   export OS_APPLICATION_CREDENTIAL_SECRET="your-app-cred-secret"
+   ```
+
+### Service Discovery Issues
+
+#### Error: "Could not find Maia endpoint in service catalog"
+
+**Cause**: Maia service is not registered in your region's OpenStack service catalog.
+
+**Solution**:
+
+1. Verify Maia is deployed in your region:
+   ```bash
+   openstack catalog list | grep -i maia
+   openstack endpoint list --service maia
+   ```
+
+2. If Maia is not listed, it may not be deployed in your region. Contact your cloud operator.
+
+3. **Workaround**: If you know the Maia URL, bypass service discovery:
+   ```bash
+   maia metric-names --maia-url="https://maia.myregion.cloud.sap:443"
+   ```
+
+4. To always use a specific URL, set the environment variable:
+   ```bash
+   export MAIA_URL="https://maia.myregion.cloud.sap:443"
+   maia metric-names  # Now uses MAIA_URL automatically
+   ```
+
+### Connection Issues
+
+#### Error: "Connection timeout" or "Connection refused"
+
+**Cause**: Network connectivity issue or incorrect URL.
+
+**Solution**:
+
+1. Test basic connectivity to the Maia endpoint:
+   ```bash
+   # Replace with your actual region
+   curl -I https://maia.myregion.cloud.sap:443
+   ```
+
+2. Verify the correct region URL:
+   ```bash
+   # List all available endpoints
+   openstack endpoint list | grep maia
+   ```
+
+3. Test Keystone connectivity first:
+   ```bash
+   curl -I $OS_AUTH_URL
+   # Should return HTTP 300 Multiple Choices
+   ```
+
+### Query Issues
+
+#### Error: "No metrics returned" or empty results
+
+**Cause**: Incorrect metric names, label selectors, or time range; or no metrics exist for your project.
+
+**Solution**:
+
+1. List all available metrics first:
+   ```bash
+   maia metric-names
+   ```
+
+2. Verify the metric exists and check its labels:
+   ```bash
+   maia series --selector='__name__="your_metric_name"'
+   ```
+
+3. Check if metrics are being collected for your project:
+   ```bash
+   # Query a universal metric that should always exist
+   maia query 'up'
+   ```
+
+4. Verify your project has monitoring data:
+   - Metrics are project-scoped by default
+   - You'll only see metrics from resources in your current project
+   - Switch projects if needed: `export OS_PROJECT_NAME="other-project"`
+
+#### Error: "server failed with status: 503 Service Unavailable"
+
+**Cause**: Maia service or backend Prometheus is temporarily unavailable.
+
+**Solution**:
+
+1. Wait a few minutes and retry - this may be a temporary issue
+
+2. Contact your cloud operations team if the issue persists
+
+### Global Region Errors
+
+#### Error: "global keystone backend unavailable" (when using --global flag)
+
+**Cause**: The Maia server is not configured with global keystone support, or the global backend is down.
+
+**Solution**:
+
+1. Verify your region supports global queries:
+   - Not all Maia deployments have global keystone configured
+   - Contact your cloud operator to confirm availability
+
+2. If global support exists, this may be a temporary outage:
+   - Try again in a few minutes
+   - Check with cloud operations for status
+
+**Note**: The global region contains data that is separate from regional backends. If global is not available, you cannot access global-specific metrics by querying regional backends individually.
+
+### Performance Issues
+
+#### Issue: Queries are slow or timing out
+
+**Solution**:
+
+1. Use token authentication instead of password authentication:
+   ```bash
+   export OS_TOKEN=$(openstack token issue -c id -f value)
+   # Tokens are valid for ~1 hour and avoid repeated Keystone calls
+   ```
+
+2. Reduce query scope with label matchers:
+   ```bash
+   # Instead of querying all series
+   maia series --selector='job="prometheus"'
+
+   # Be specific with time ranges for range queries
+   maia query 'up' --start='2025-09-30T00:00:00Z' --end='2025-09-30T01:00:00Z'
+   ```
+
+3. Use appropriate step sizes for range queries:
+   ```bash
+   # Larger step sizes = fewer data points = faster queries
+   maia query 'up' --start='2025-09-29T00:00:00Z' --end='2025-09-30T00:00:00Z' --stepsize='5m'
+   ```
+
+### Debug Mode
+
+Enable debug logging to see detailed information about what Maia is doing:
+
+```bash
+# Set debug environment variable
+export MAIA_DEBUG=1
+
+# Now run commands with verbose output
+maia metric-names
+
+# Output will include:
+# - Authentication type being used
+# - API server URL
+# - Detailed error messages
+```
+
+### Getting Help
+
+If you continue to experience issues:
+
+1. **Check Maia version**: Ensure you're using a recent version
+   ```bash
+   maia --version
+   ```
+
+2. **Contact Support**:
+   - Open an issue: https://github.com/sapcc/maia/issues
+   - Provide: Maia version, error message, sanitized command (remove passwords)
+   - Include debug output: `MAIA_DEBUG=1 maia <command> 2>&1`
+
+3. **Community Resources**:
+   - Maia GitHub: https://github.com/sapcc/maia
+   - OpenStack documentation: https://docs.openstack.org
