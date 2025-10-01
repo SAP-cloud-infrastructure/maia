@@ -757,7 +757,7 @@ If you continue to experience issues:
    ```
 
 2. **Contact Support**:
-   - Open an issue: https://github.com/sapcc/maia/issues
+   - Open an issue: https://github.com/SAP-cloud-infrastructure/maia/issues
    - Provide: Maia version, error message, sanitized command (remove passwords)
    - Include debug output: `MAIA_DEBUG=1 maia <command> 2>&1`
 
