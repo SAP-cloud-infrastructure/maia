@@ -762,5 +762,5 @@ If you continue to experience issues:
    - Include debug output: `MAIA_DEBUG=1 maia <command> 2>&1`
 
 3. **Community Resources**:
-   - Maia GitHub: https://github.com/sapcc/maia
+   - Maia GitHub: https://github.com/SAP-cloud-infrastructure/maia
    - OpenStack documentation: https://docs.openstack.org
