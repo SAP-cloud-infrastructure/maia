@@ -3,8 +3,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 [default.extend-words]
+Alue = "Alue"
+ba = "ba"
+tabl = "tabl"
+valu = "valu"
 
 [files]
 extend-exclude = [
   "go.mod",
+  "web/static/vendor/",
+  "docs/*.svg",
 ]

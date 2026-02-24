@@ -11,7 +11,7 @@ a [Prometheus-compatible](https://prometheus.io/docs/querying/api/) API and supp
 
 This guide describes how to integrate with the Maia service from applications using the Maia API.
 
-Contributors will get an overview on Maia's design priciples and requirements to contributors.
+Contributors will get an overview on Maia's design principles and requirements to contributors.
 
 ## Concept
 

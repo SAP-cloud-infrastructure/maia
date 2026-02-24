@@ -432,22 +432,22 @@ func Test_Auth(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			paniced := authentication(tc.tokenid, tc.authtype, tc.username, tc.userid, tc.password, tc.appcredid, tc.appcredname, tc.appcredsecret)
-			if paniced != tc.expectpanic {
+			panicked := authentication(tc.tokenid, tc.authtype, tc.username, tc.userid, tc.password, tc.appcredid, tc.appcredname, tc.appcredsecret)
+			if panicked != tc.expectpanic {
 				t.Errorf("Panic does not match desired result for test: %v", tc)
 			}
 		})
 	}
 }
 
-func authentication(tokenid, authtype, username, userid, password, appcredid, appcredname, appcredsecret string) (paniced bool) {
-	paniced = false
+func authentication(tokenid, authtype, username, userid, password, appcredid, appcredname, appcredsecret string) (panicked bool) {
+	panicked = false
 	ctx := context.Background()
 
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Fprintln(os.Stderr, r)
-			paniced = true
+			panicked = true
 		}
 	}()
 
@@ -509,7 +509,7 @@ func authentication(tokenid, authtype, username, userid, password, appcredid, ap
 	}, "http://localhost:9091", nil)
 	fetchToken(ctx)
 
-	return paniced
+	return panicked
 }
 
 // Global flag tests

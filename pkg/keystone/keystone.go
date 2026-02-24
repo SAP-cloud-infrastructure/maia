@@ -322,7 +322,7 @@ func (d *keystone) authOpts2StringKey(authOpts gophercloud.AuthOptions) string {
 			authOpts.DomainName + " " + authOpts.ApplicationCredentialID + " " + authOpts.ApplicationCredentialName + " " +
 			authOpts.ApplicationCredentialSecret
 	} else {
-		// for basic authentiation credentials we need to take into account the scoping information as well
+		// for basic authentication credentials we need to take into account the scoping information as well
 		baseKey = authOpts.UserID + " " + authOpts.Username + " " + authOpts.Password + " " + authOpts.DomainID + " " +
 			authOpts.DomainName + " " + authOpts.Scope.ProjectID + " " + authOpts.Scope.ProjectName + " " +
 			authOpts.Scope.DomainID + " " + authOpts.Scope.DomainName

@@ -28,6 +28,17 @@ nix:
     - go-bindata
     - mockgen
 
+typos:
+  enabled: true
+  extendExcludes:
+    - "web/static/vendor/"
+    - "docs/*.svg"
+  extendWords:
+    ba: ba
+    Alue: Alue
+    valu: valu
+    tabl: tabl
+
 renovate:
   enabled: true
   assignees:

@@ -204,7 +204,7 @@ func printValues(resp *http.Response) {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		panic(fmt.Errorf("server responsed with error code %d: %s", resp.StatusCode, err.Error()))
+		panic(fmt.Errorf("server responded with error code %d: %s", resp.StatusCode, err.Error()))
 	} else {
 		contentType := resp.Header.Get("Content-Type")
 		if contentType == storage.JSON {
@@ -245,7 +245,7 @@ func printTable(resp *http.Response) {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("server responsed with error code %d: %s", resp.StatusCode, err.Error())
+		fmt.Printf("server responded with error code %d: %s", resp.StatusCode, err.Error())
 	} else {
 		contentType := resp.Header.Get("Content-Type")
 		if contentType == storage.JSON {
@@ -457,7 +457,7 @@ func printQueryResponse(resp *http.Response) {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Server responsed with error code %d: %s", resp.StatusCode, err.Error())
+		fmt.Fprintf(os.Stderr, "Server responded with error code %d: %s", resp.StatusCode, err.Error())
 		return
 	}
 

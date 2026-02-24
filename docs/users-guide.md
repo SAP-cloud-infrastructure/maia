@@ -336,7 +336,7 @@ Finally you can extract all values during a given timeframe by specifying a star
 
 You should also specify the resolution using the `--stepsize` parameter. Otherwise
 Maia will choose defaults that may not always fit well. Timestamps can be specified in Unix or RC3339 format. Durations are
-specififed as numbers with a unit suffix, such as `30s`, `1.5h` or `2h45m`. Valid time units are `ns`, `us`,
+specified as numbers with a unit suffix, such as `30s`, `1.5h` or `2h45m`. Valid time units are `ns`, `us`,
 `ms`, `s`, `m`, `h`.
 
 ```
@@ -345,7 +345,7 @@ maia query ... --start 2017-07-01T05:10:51.781Z --end 2017-07-01T09:10:51.781Z -
 
 Also be aware that due to the sheer amount of data, range query results usually do not fit the width of a terminal screen.
 For that reason the default output format for _range queries_ is `json` and not `table`. Keep this in mind when you want to
-do a CSV export to a speadsheet.
+do a CSV export to a spreadsheet.
 
 Enter `maia query --help` for more options.
 

@@ -19,7 +19,7 @@ The API service exposes:
 | Counter | `maia_logon_failures_count` ||
 | Summary | `maia_request_duration_seconds` ||
 | Counter | `maia_request_duration_seconds_count` ||
-| Gague | `maia_requests_inflight` ||
+| Gauge | `maia_requests_inflight` ||
 | Summary | `maia_response_size_bytes` ||
 | Counter | `maia_response_size_bytes_count` ||
 | Counter | `maia_response_size_bytes_sum` ||
