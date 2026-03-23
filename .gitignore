@@ -23,3 +23,7 @@ build/cover.html
 
 # other
 .idea*
+.claude/
+coverage.out
+maia
+task_plan.md
