@@ -139,6 +139,7 @@ func (p *v1Provider) LabelValues(w http.ResponseWriter, req *http.Request) {
 	query, err := util.AddLabelConstraintToExpression("count({"+string(name)+"!=\"\"}) BY ("+string(name)+")", labelKey, labelValues)
 	if err != nil {
 		ReturnPromError(w, err, http.StatusBadRequest)
+		return
 	}
 
 	start := time.Now().Add(-ttl)
@@ -169,7 +170,9 @@ func (p *v1Provider) LabelValues(w http.ResponseWriter, req *http.Request) {
 	}
 	matrix, ok := sr.Data.Value.(model.Matrix)
 	if !ok {
-		ReturnPromError(w, fmt.Errorf("unexpected result type from query_range: expected matrix, got %T", sr.Data.Value), http.StatusInternalServerError)
+		err := fmt.Errorf("cannot process LabelValues response: expected matrix result type, got %s", sr.Data.Value.Type())
+		logg.Error(err.Error())
+		ReturnPromError(w, err, http.StatusBadGateway)
 		return
 	}
 

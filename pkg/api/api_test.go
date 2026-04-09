@@ -228,11 +228,12 @@ func TestLabelValues(t *testing.T) {
 	}.Check(t, router)
 }
 
-// TestLabelValues_nonMatrixResult verifies that LabelValues returns a 500 error
-// (not a panic) when the backing Prometheus query_range returns a non-matrix
-// result type (e.g. a vector). Before the fix, the bare type assertion
-// sr.Data.Value.(model.Matrix) on line 169 would panic for any non-matrix Value.
-func TestLabelValues_nonMatrixResult(t *testing.T) {
+// TestLabelValues_errorNonMatrixResult verifies that LabelValues returns a 502
+// error (not a panic) when the backing Prometheus query_range returns a
+// non-matrix result type (e.g. a vector). Before the fix, the bare type
+// assertion sr.Data.Value.(model.Matrix) in LabelValues would panic for any
+// non-matrix Value.
+func TestLabelValues_errorNonMatrixResult(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	router, keystoneMock, storageMock := setupTest(t, ctrl)
@@ -248,7 +249,8 @@ func TestLabelValues_nonMatrixResult(t *testing.T) {
 		Headers:          map[string]string{"Authorization": base64.StdEncoding.EncodeToString([]byte("Basic user_id|12345:password")), "Accept": storage.JSON},
 		Method:           "GET",
 		Path:             "/api/v1/label/service/values",
-		ExpectStatusCode: http.StatusInternalServerError,
+		ExpectStatusCode: http.StatusBadGateway,
+		ExpectJSON:       "fixtures/label_values_nonmatrix_error.json",
 	}.Check(t, router)
 }
 
