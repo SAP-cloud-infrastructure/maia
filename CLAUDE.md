@@ -278,6 +278,17 @@ The web UI and API support a custom basic auth username format parsed in `keysto
 
 This repo uses `testify/assert`, `spf13/viper`, and `go.uber.org/mock` — all three are flagged as forbidden by SAP CC Go conventions. They are grandfathered in and required by the existing architecture. Do not attempt to remove them without explicit approval. Do not add new forbidden dependencies.
 
+## Changelog
+
+This project maintains a `CHANGELOG.md` following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. It is required by the release process (`RELEASE.md`).
+
+**Rules:**
+- Every user-visible change must have a CHANGELOG entry before release.
+- Use sections: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`.
+- New work goes under `## [Unreleased]`. The release process moves it to a versioned heading.
+- Entries should be concise, one line each, written from the user/operator perspective (not implementation details).
+- Version headings follow semantic versioning: `## [X.Y.Z] - YYYY-MM-DD`.
+
 ## Common Pitfalls
 
 - **Don't edit Makefile, .golangci.yaml, .typos.toml, or CI workflows** — they are generated from `Makefile.maker.yaml`. Run `go-makefile-maker` to regenerate.
