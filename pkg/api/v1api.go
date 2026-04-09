@@ -6,6 +6,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"sort"
@@ -166,7 +167,11 @@ func (p *v1Provider) LabelValues(w http.ResponseWriter, req *http.Request) {
 		ReturnPromError(w, err, http.StatusInternalServerError)
 		return
 	}
-	matrix := sr.Data.Value.(model.Matrix)
+	matrix, ok := sr.Data.Value.(model.Matrix)
+	if !ok {
+		ReturnPromError(w, fmt.Errorf("unexpected result type from query_range: expected matrix, got %T", sr.Data.Value), http.StatusInternalServerError)
+		return
+	}
 
 	// take just the label values from the query result
 	var result storage.LabelValuesResponse

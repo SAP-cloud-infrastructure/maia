@@ -1,0 +1,17 @@
+{
+    "status": "success",
+    "data": {
+        "resultType": "vector",
+        "result": [
+            {
+                "metric": {
+                    "service": "dns"
+                },
+                "value": [
+                    1567641600,
+                    "20"
+                ]
+            }
+        ]
+    }
+}
