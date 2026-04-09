@@ -209,6 +209,129 @@ func TestSeries_failAuthorization(t *testing.T) {
 	}.Check(t, router)
 }
 
+func TestLabels(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	router, keystoneMock, storageMock := setupTest(t, ctrl)
+
+	expectAuthWithChildren(keystoneMock)
+	storageMock.EXPECT().Labels(
+		"2017-07-01T20:10:30.781Z",
+		"2017-07-02T04:00:00.000Z",
+		[]string{"{component!=\"\",project_id=~\"12345|67890\"}"},
+		storage.JSON,
+	).Return(test.HTTPResponseFromFile("fixtures/labels.json"), nil)
+
+	test.APIRequest{
+		Headers:          map[string]string{"X-Auth-Token": "someverylongtokenideed", "Accept": storage.JSON},
+		Method:           "GET",
+		Path:             "/api/v1/labels?match[]={component!=%22%22}&end=2017-07-02T04:00:00.000Z&start=2017-07-01T20:10:30.781Z",
+		ExpectStatusCode: http.StatusOK,
+		ExpectJSON:       "fixtures/labels.json",
+	}.Check(t, router)
+}
+
+func TestLabels_domainScope(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	router, keystoneMock, storageMock := setupTest(t, ctrl)
+
+	expectAuthByDomainName(keystoneMock)
+	storageMock.EXPECT().Labels(
+		"2017-07-01T20:10:30.781Z",
+		"2017-07-02T04:00:00.000Z",
+		[]string{"{component!=\"\",domain_id=\"77777\"}"},
+		storage.JSON,
+	).Return(test.HTTPResponseFromFile("fixtures/labels.json"), nil)
+
+	test.APIRequest{
+		Headers:          map[string]string{"Authorization": base64.StdEncoding.EncodeToString([]byte("Basic u12345|@77777:password")), "Accept": storage.JSON},
+		Method:           "GET",
+		Path:             "/api/v1/labels?match[]={component!=%22%22}&end=2017-07-02T04:00:00.000Z&start=2017-07-01T20:10:30.781Z",
+		ExpectStatusCode: http.StatusOK,
+		ExpectJSON:       "fixtures/labels.json",
+	}.Check(t, router)
+}
+
+func TestLabels_errorNoMatch(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	router, keystoneMock, _ := setupTest(t, ctrl)
+
+	expectAuthByProjectID(keystoneMock)
+
+	test.APIRequest{
+		Headers:          map[string]string{"Authorization": base64.StdEncoding.EncodeToString([]byte("Basic user_id|12345:password")), "Accept": storage.JSON},
+		Method:           "GET",
+		Path:             "/api/v1/labels",
+		ExpectStatusCode: http.StatusBadRequest,
+	}.Check(t, router)
+}
+
+func TestLabels_errorInvalidSelector(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	router, keystoneMock, _ := setupTest(t, ctrl)
+
+	expectAuthByProjectID(keystoneMock)
+
+	test.APIRequest{
+		Headers:          map[string]string{"Authorization": base64.StdEncoding.EncodeToString([]byte("Basic user_id|12345:password")), "Accept": storage.JSON},
+		Method:           "GET",
+		Path:             "/api/v1/labels?match[]={invalid_syntax=}",
+		ExpectStatusCode: http.StatusBadRequest,
+	}.Check(t, router)
+}
+
+func TestLabels_errorBackendFailed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	router, keystoneMock, storageMock := setupTest(t, ctrl)
+
+	expectAuthWithChildren(keystoneMock)
+	storageMock.EXPECT().Labels(
+		"2017-07-01T20:10:30.781Z",
+		"2017-07-02T04:00:00.000Z",
+		[]string{"{component!=\"\",project_id=~\"12345|67890\"}"},
+		storage.JSON,
+	).Return(nil, errors.New("testerror"))
+
+	test.APIRequest{
+		Headers:          map[string]string{"X-Auth-Token": "someverylongtokenideed", "Accept": storage.JSON},
+		Method:           "GET",
+		Path:             "/api/v1/labels?match[]={component!=%22%22}&end=2017-07-02T04:00:00.000Z&start=2017-07-01T20:10:30.781Z",
+		ExpectStatusCode: http.StatusServiceUnavailable,
+	}.Check(t, router)
+}
+
+func TestLabels_failAuthentication(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	router, keystoneMock, _ := setupTest(t, ctrl)
+
+	expectAuthAndFail(keystoneMock)
+
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/api/v1/labels?match[]={component!=%22%22}&end=2017-07-02T04:00:00.000Z&start=2017-07-01T20:10:30.781Z",
+		ExpectStatusCode: http.StatusUnauthorized,
+	}.Check(t, router)
+}
+
+func TestLabels_failAuthorization(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	router, keystoneMock, _ := setupTest(t, ctrl)
+
+	expectAuthAndDenyAuthorization(keystoneMock)
+
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/api/v1/labels?match[]={component!=%22%22}&end=2017-07-02T04:00:00.000Z&start=2017-07-01T20:10:30.781Z",
+		ExpectStatusCode: http.StatusForbidden,
+	}.Check(t, router)
+}
+
 func TestLabelValues(t *testing.T) {
 	ctrl := gomock.NewController(t)
 

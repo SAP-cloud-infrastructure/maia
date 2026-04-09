@@ -52,6 +52,8 @@ func NewV1Handler(keystoneDriver keystone.Driver, storageDriver storage.Driver) 
 		"metric:show"))
 	// tenant-aware label value lists
 	r.Methods(http.MethodGet).Path("/label/{name}/values").HandlerFunc(authorize(observeDuration(observeResponseSize(p.LabelValues, "label_values"), "label_values"), false, "metric:list"))
+	// tenant-aware label name lists
+	r.Methods(http.MethodGet).Path("/labels").HandlerFunc(authorize(observeDuration(observeResponseSize(p.Labels, "labels"), "labels"), false, "metric:list"))
 	// tenant-aware series metadata
 	r.Methods(http.MethodGet).Path("/series").HandlerFunc(authorize(observeDuration(observeResponseSize(p.Series, "series"), "series"), false, "metric:list"))
 
@@ -207,12 +209,23 @@ func (p *v1Provider) Series(w http.ResponseWriter, req *http.Request) {
 }
 
 func (p *v1Provider) Labels(w http.ResponseWriter, req *http.Request) {
+	ks := getKeystoneFromContext(req.Context())
+	if ks == nil {
+		ReturnPromError(w, errors.New("keystone context not available"), http.StatusInternalServerError)
+		return
+	}
+
+	match, err := buildSelectors(req, ks)
+	if err != nil {
+		ReturnPromError(w, err, http.StatusBadRequest)
+		return
+	}
+
 	queryParams := req.URL.Query()
 	start := queryParams.Get("start")
 	end := queryParams.Get("end")
-	match := queryParams["match[]"]
 
-	resp, err := p.storage.Labels(start, end, match, req.Header.Get("Accept"))
+	resp, err := p.storage.Labels(start, end, *match, req.Header.Get("Accept"))
 	if err != nil {
 		ReturnPromError(w, err, http.StatusServiceUnavailable)
 		return
