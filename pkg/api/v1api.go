@@ -170,9 +170,7 @@ func (p *v1Provider) LabelValues(w http.ResponseWriter, req *http.Request) {
 	}
 	matrix, ok := sr.Data.Value.(model.Matrix)
 	if !ok {
-		err := fmt.Errorf("cannot process LabelValues response: expected matrix result type, got %s", sr.Data.Value.Type())
-		logg.Error(err.Error())
-		ReturnPromError(w, err, http.StatusBadGateway)
+		ReturnPromError(w, fmt.Errorf("cannot process LabelValues response: expected matrix result type, got %s", sr.Data.Value.Type()), http.StatusBadGateway)
 		return
 	}
 
