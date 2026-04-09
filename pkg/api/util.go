@@ -86,7 +86,7 @@ func versionData() VersionData {
 			},
 			{
 				Relation: "describedby",
-				URL:      "https://github.com/sapcc/maia/tree/master/README.md",
+				URL:      "https://github.com/SAP-cloud-infrastructure/maia/tree/master/README.md",
 				Type:     "text/html",
 			},
 		},

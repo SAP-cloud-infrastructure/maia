@@ -1,7 +1,7 @@
 # Configuration file for <https://github.com/sapcc/go-makefile-maker>
 
 metadata:
-  url: https://github.com/sapcc/maia
+  url: https://github.com/SAP-cloud-infrastructure/maia
 
 binaries:
   - name:        maia

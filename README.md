@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Maia
 
-[![CI](https://github.com/sapcc/maia/actions/workflows/ci.yaml/badge.svg)](https://github.com/sapcc/maia/actions/workflows/ci.yaml)
+[![CI](https://github.com/SAP-cloud-infrastructure/maia/actions/workflows/ci.yaml/badge.svg)](https://github.com/SAP-cloud-infrastructure/maia/actions/workflows/ci.yaml)
 
 Maia is a multi-tenant OpenStack-service for accessing metrics and alarms collected through Prometheus. It offers 
 a [Prometheus-compatible](https://prometheus.io/docs/querying/api/) API and supports federation.
@@ -51,7 +51,7 @@ If you don't use OpenStack, you can still use Maia CLI as a feature-complete she
 
 ### Binary Releases
 
-Binary releases for Linux and MacOS can be downloaded from the GitHub [releases](https://github.com/sapcc/maia/releases) page.
+Binary releases for Linux and MacOS can be downloaded from the GitHub [releases](https://github.com/SAP-cloud-infrastructure/maia/releases) page.
 
 ### Build from Source
 
@@ -79,7 +79,7 @@ Please refer to the [Maia user guide](./docs/users-guide.md) for detailed instru
 
 ## For Operators
 
-Deploy Maia as a Kubernetes service using the [Maia Helm chart](https://github.com/sapcc/helm-charts/tree/master/openstack/maia) (includes Maia, Prometheus, and Thanos).
+Deploy Maia as a Kubernetes service using the [Maia Helm chart](https://github.com/SAP-cloud-infrastructure/helm-charts/tree/master/openstack/maia) (includes Maia, Prometheus, and Thanos).
 
 The [operators guide](./docs/operators-guide.md) covers configuration, Keystone integration, global region setup, exporter requirements, and monitoring.
 
@@ -103,4 +103,4 @@ We as members, contributors, and leaders pledge to make participation in our com
 
 ## Licensing
 
-Copyright 2017-2025 SAP SE or an SAP affiliate company and maia contributors. Please see our [LICENSE](LICENSE) for copyright and license information. Detailed information including third-party components and their licensing/copyright information is available [via the REUSE tool](https://api.reuse.software/info/github.com/sapcc/maia).
+Copyright 2017-2025 SAP SE or an SAP affiliate company and maia contributors. Please see our [LICENSE](LICENSE) for copyright and license information. Detailed information including third-party components and their licensing/copyright information is available [via the REUSE tool](https://api.reuse.software/info/github.com/SAP-cloud-infrastructure/maia).

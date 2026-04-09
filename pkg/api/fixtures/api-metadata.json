@@ -9,7 +9,7 @@
           "rel": "self"
         },
         {
-          "href": "https://github.com/sapcc/maia/tree/master/README.md",
+          "href": "https://github.com/SAP-cloud-infrastructure/maia/tree/master/README.md",
           "rel": "describedby",
           "type": "text/html"
         }

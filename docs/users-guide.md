@@ -26,7 +26,7 @@ Before using Maia CLI, ensure you have:
 1. **OpenStack Account**: Access to an OpenStack environment with Maia deployed
 2. **Project Access**: Membership in at least one OpenStack project
 3. **Required Role**: The `monitoring_viewer` or `monitoring_admin` role on your project
-4. **Maia Binary**: Download from [GitHub releases](https://github.com/sapcc/maia/releases) or build from source
+4. **Maia Binary**: Download from [GitHub releases](https://github.com/SAP-cloud-infrastructure/maia/releases) or build from source
 
 **Check if you have the required role**:
 ```bash

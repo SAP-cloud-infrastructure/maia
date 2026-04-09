@@ -62,8 +62,8 @@ RUN set -x \
   && maia --version 2>/dev/null
 
 ARG BININFO_BUILD_DATE BININFO_COMMIT_HASH BININFO_VERSION
-LABEL source_repository="https://github.com/sapcc/maia" \
-  org.opencontainers.image.url="https://github.com/sapcc/maia" \
+LABEL source_repository="https://github.com/SAP-cloud-infrastructure/maia" \
+  org.opencontainers.image.url="https://github.com/SAP-cloud-infrastructure/maia" \
   org.opencontainers.image.created=${BININFO_BUILD_DATE} \
   org.opencontainers.image.revision=${BININFO_COMMIT_HASH} \
   org.opencontainers.image.version=${BININFO_VERSION}

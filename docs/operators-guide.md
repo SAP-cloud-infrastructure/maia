@@ -201,7 +201,7 @@ Users authorized to a project will be able to access the metrics of all sub-proj
 
 The following exporters are known to produce suitible metrics:
 
-* [VCenter Exporter](https://github.com/sapcc/vcenter-exporter) provides project-specific metrics from an OpenStack-
+* [VCenter Exporter](https://github.com/SAP-cloud-infrastructure/vcenter-exporter) provides project-specific metrics from an OpenStack-
 controlled VCenter.
 * [SNMP Exporter](https://github.com/prometheus/snmp_exporter) can be configured to extract project IDs from
 SNMP variables into labels. Since most of the SNMP-enabled devices are shared, only a few metrics can be mapped to
