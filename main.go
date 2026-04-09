@@ -9,7 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/sapcc/maia/pkg/cmd"
+	"github.com/SAP-cloud-infrastructure/maia/pkg/cmd"
 )
 
 func main() {

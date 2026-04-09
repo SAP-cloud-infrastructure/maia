@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/sapcc/maia/pkg/api"
+	"github.com/SAP-cloud-infrastructure/maia/pkg/api"
 )
 
 // serveCmd represents the get command

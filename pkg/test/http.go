@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sapcc/maia/pkg/storage"
+	"github.com/SAP-cloud-infrastructure/maia/pkg/storage"
 )
 
 // APIRequest contains all metadata about a test request.

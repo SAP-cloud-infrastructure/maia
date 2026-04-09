@@ -23,8 +23,8 @@ import (
 
 	"github.com/sapcc/go-bits/logg"
 
-	"github.com/sapcc/maia/pkg/keystone"
-	"github.com/sapcc/maia/pkg/storage"
+	"github.com/SAP-cloud-infrastructure/maia/pkg/keystone"
+	"github.com/SAP-cloud-infrastructure/maia/pkg/storage"
 )
 
 const (

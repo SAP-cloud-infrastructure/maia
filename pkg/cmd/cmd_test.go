@@ -20,9 +20,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
-	"github.com/sapcc/maia/pkg/keystone"
-	"github.com/sapcc/maia/pkg/storage"
-	"github.com/sapcc/maia/pkg/test"
+	"github.com/SAP-cloud-infrastructure/maia/pkg/keystone"
+	"github.com/SAP-cloud-infrastructure/maia/pkg/storage"
+	"github.com/SAP-cloud-infrastructure/maia/pkg/test"
 )
 
 type testReporter struct {

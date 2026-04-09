@@ -16,9 +16,9 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/spf13/viper"
 
-	"github.com/sapcc/maia/pkg/keystone"
-	"github.com/sapcc/maia/pkg/storage"
-	"github.com/sapcc/maia/pkg/util"
+	"github.com/SAP-cloud-infrastructure/maia/pkg/keystone"
+	"github.com/SAP-cloud-infrastructure/maia/pkg/storage"
+	"github.com/SAP-cloud-infrastructure/maia/pkg/util"
 )
 
 // class for Prometheus v1 API provider implementation

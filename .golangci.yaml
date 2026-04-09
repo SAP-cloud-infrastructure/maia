@@ -19,7 +19,7 @@ formatters:
     goimports:
       # Put local imports after 3rd-party packages
       local-prefixes:
-        - github.com/sapcc/maia
+        - github.com/SAP-cloud-infrastructure/maia
   exclusions:
     generated: lax
     paths:
@@ -132,6 +132,8 @@ linters:
         - github.com/mdlayher/arp
         # for github.com/sapcc/vpa_butler
         - k8s.io/client-go
+        # for github.com/sapcc/keppel et al
+        - github.com/go-gorp/gorp/v3
       toolchain-forbidden: true
       go-version-pattern: 1\.\d+(\.0)?$
     gosec:

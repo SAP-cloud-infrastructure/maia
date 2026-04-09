@@ -13,7 +13,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/tokens"
 
-	"github.com/sapcc/maia/pkg/keystone"
+	"github.com/SAP-cloud-infrastructure/maia/pkg/keystone"
 )
 
 // Mock keystone driver for testing

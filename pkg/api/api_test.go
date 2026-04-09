@@ -18,9 +18,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
-	"github.com/sapcc/maia/pkg/keystone"
-	"github.com/sapcc/maia/pkg/storage"
-	"github.com/sapcc/maia/pkg/test"
+	"github.com/SAP-cloud-infrastructure/maia/pkg/keystone"
+	"github.com/SAP-cloud-infrastructure/maia/pkg/storage"
+	"github.com/SAP-cloud-infrastructure/maia/pkg/test"
 )
 
 var projectContext = &policy.Context{Request: map[string]string{"project_id": "12345", "domain_id": "77777", "user_id": "u12345"},

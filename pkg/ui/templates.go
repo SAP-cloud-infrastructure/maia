@@ -14,7 +14,7 @@ import (
 
 	"github.com/prometheus/common/model"
 
-	"github.com/sapcc/maia/pkg/keystone"
+	"github.com/SAP-cloud-infrastructure/maia/pkg/keystone"
 )
 
 // ExecuteTemplate renders an HTML-template stored in web/templates/

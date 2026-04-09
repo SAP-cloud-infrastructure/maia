@@ -1,4 +1,4 @@
-module github.com/sapcc/maia
+module github.com/SAP-cloud-infrastructure/maia
 
 go 1.26
 
