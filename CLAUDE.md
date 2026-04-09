@@ -4,7 +4,7 @@
 
 Maia is a multi-tenant OpenStack service that provides Prometheus metrics access with Keystone authentication. It acts as an authenticating proxy between OpenStack tenants and a Prometheus backend, injecting tenant constraints into all PromQL queries to enforce data isolation.
 
-**Stack**: Go 1.26 · Prometheus · Keystone · cobra/viper · gorilla/mux · gophercloud · go-cache
+**Stack**: Go 1.26 · Prometheus · Keystone · cobra/viper · gorilla/mux · gophercloud · go-cache · rs/cors
 
 ## Quick Reference
 
@@ -17,6 +17,22 @@ make static-check        # All static analysis
 make generate            # Code generation (must run before build)
 make license-headers     # Add REUSE-compliant headers
 ```
+
+### Generated Files — DO NOT EDIT
+
+These files are auto-generated. Edit their sources instead:
+
+| Generated File | Source / Generator |
+|----------------|-------------------|
+| `Makefile` | `Makefile.maker.yaml` → `go-makefile-maker` |
+| `.golangci.yaml` | `Makefile.maker.yaml` → `go-makefile-maker` |
+| `.github/workflows/ci.yaml` | `Makefile.maker.yaml` → `go-makefile-maker` |
+| `.typos.toml` | `Makefile.maker.yaml` → `go-makefile-maker` |
+| `pkg/storage/genmock.go` | `pkg/storage/interface.go` → `mockgen` |
+| `pkg/keystone/genmock.go` | `pkg/keystone/interface.go` → `mockgen` |
+| `pkg/ui/bindata.go` | `web/templates/` + `web/static/` → `go-bindata` |
+
+**`make generate` is a hard prerequisite.** The mock files and `bindata.go` do not exist in a clean checkout. Without running `make generate` first, the repo **will not compile** — you get `undefined: keystone.NewMockDriver` and `undefined: Asset` errors.
 
 ## Architecture
 
@@ -47,7 +63,7 @@ Maia operates in three modes:
 - **Zero-copy proxying**: Storage driver returns raw `*http.Response` from Prometheus — no unmarshal-marshal cycles. Maia modifies queries before sending, not responses after.
 - **AST-based PromQL modification**: Uses Prometheus's parser to inject tenant constraints into the expression tree via visitor pattern (`labelInjector`). Never uses string manipulation on PromQL.
 - **Context-based keystone resolution**: `keystoneResolutionMiddleware` determines regional vs global keystone once per request and stores it in `context.Context`. All downstream handlers retrieve via `getKeystoneFromContext()`. Eliminates race conditions.
-- **Panic-based error handling in CLI**: Commands use `defer recoverAll()` to convert panics to error output. Validation failures panic immediately.
+- **Panic-based error handling in CLI**: Client commands (`snapshot`, `query`, `series`, `label-values`, `metric-names`) use `defer recoverAll()` to convert panics to stderr. The `serve` command has its own inline `recover()` — it does NOT use the shared `recoverAll()`. Server-side API handlers use `ReturnPromError()` to return Prometheus-compatible JSON errors instead.
 - **5-layer token caching**: Token cache (900s), project tree cache (900s), user projects cache (900s), user ID cache (24h), project scope cache (24h). All use go-cache (thread-safe).
 
 ## CLI Commands
@@ -93,7 +109,7 @@ All `OS_*` environment variables are supported (e.g., `OS_AUTH_URL`, `OS_USERNAM
 | GET | `/api/v1/query_range` | `metric:show` | Range PromQL query |
 | GET | `/api/v1/series` | `metric:list` | List time series |
 | GET | `/api/v1/label/{name}/values` | `metric:list` | Label values |
-| GET | `/api/v1/labels` | (none) | List label names |
+| GET | `/api/v1/labels` | — | **Not registered** (handler exists as dead code in `v1api.go` but no route) |
 | GET | `/federate` | `metric:show` | Prometheus federation endpoint |
 | GET | `/{domain}/graph` | (basic auth) | Expression browser UI |
 | GET | `/metrics` | (none) | Prometheus metrics scrape |
@@ -103,6 +119,8 @@ All `OS_*` environment variables are supported (e.g., `OS_AUTH_URL`, `OS_USERNAM
 Request flow: CORS → `keystoneResolutionMiddleware` → `authorize()` → handler → `observeDuration()` → `observeResponseSize()`
 
 The `gaugeInflight` middleware wraps the entire router for concurrent request tracking.
+
+**CORS**: Uses `rs/cors` with `AllowedHeaders: ["X-Auth-Token", "X-Global-Region"]`. Browser clients sending other custom headers will get silent CORS preflight failures.
 
 ## Multi-Tenancy
 
@@ -130,7 +148,7 @@ The `--global` flag (client) or `?global=true` param / `X-Global-Region: true` h
 ### Linting
 
 - golangci-lint v2 with 40+ linters (see `.golangci.yaml`)
-- Import ordering: stdlib, third-party, `github.com/sapcc/maia` (enforced by goimports)
+- Import ordering: stdlib → third-party → `github.com/sapcc/go-bits` → `github.com/sapcc/maia` (4-group, enforced by goimports). Use `make goimports` — don't manually organize imports.
 - typos spell checker configured in `Makefile.maker.yaml` (excludes `web/static/vendor/` and `docs/*.svg`)
 
 ### Licensing
@@ -164,6 +182,14 @@ make build/cover.out     # Tests only, with coverage
 - **Custom matchers**: `test.HTTPRequestMatcher` (validates + injects headers), `test.ContextMatcher`
 - **Diff-based validation**: Expected vs actual output compared with `diff -u`, `.actual` files generated
 
+### Test Isolation Rules
+
+- **`pkg/cmd` tests are NOT parallel-safe.** ~15 package-level mutable vars (`maiaURL`, `selector`, `auth`, `outputFormat`, `keystoneDriver`, `storageDriver`, etc.) are reset per-test via direct assignment in `setupTest()`. Never use `t.Parallel()` in this package.
+- **`pkg/api` tests must reset the Prometheus registry.** Each test calls `prometheus.DefaultRegisterer = prometheus.NewPedanticRegistry()` to avoid "already registered" panics. Omitting this in a new API test will panic.
+- **Example tests use panic-based gomock.** The `testReporter` in `cmd_test.go` converts gomock failures to panics, which Go's example test framework catches. `// Output:` comments are the actual assertion.
+- **Keystone eagerly connects on init.** `NewKeystoneDriver()` immediately calls Keystone if `viper.Get("keystone.username") != nil`. Tests with leftover viper state will attempt live connections and panic.
+- **Fixture comparison uses external `diff` binary.** `test/http.go` calls `exec.Command("diff", ...)`. Fails with unhelpful error if `diff` is not in PATH.
+
 ### Adding Tests
 
 1. Add fixture files to `pkg/<package>/fixtures/`
@@ -182,19 +208,30 @@ Default: `/etc/maia/maia.conf`
 prometheus_url = "http://prometheus:9090"
 bind_address = "0.0.0.0:9091"
 label_value_ttl = "72h"
+# proxy = "http://localhost:8889"       # HTTP proxy for Prometheus + Keystone clients
+# federate_url = "http://other:9090"    # Redirect /federate to a different backend
+# storage_driver = "prometheus"         # Only supported value (default)
+# auth_driver = "keystone"              # Only supported value (default)
 
 [keystone]
 auth_url = "https://regional-keystone/v3/"
 username = "maia"
 password = "password"
+user_domain_name = "Default"
+project_name = "service"
+project_domain_name = "Default"
+policy_file = "etc/policy.json"
 roles = "monitoring_admin,monitoring_viewer"
 token_cache_time = "900s"
-policy_file = "etc/policy.json"
+default_user_domain_name = "Default"
 
-[keystone.global]                  # Optional global keystone
+[keystone.global]                       # Optional: full credential set required
 auth_url = "https://global-keystone/v3/"
 username = "maia"
 password = "globalpassword"
+user_domain_name = "Default"
+project_name = "service"
+project_domain_name = "Default"
 ```
 
 ### Environment Variables
@@ -223,6 +260,24 @@ password = "globalpassword"
 | Counter | `maia_logon_failures_count` | — |
 | Counter | `maia_tsdb_errors_count` | — |
 
+## Extended Basic Auth Format
+
+The web UI and API support a custom basic auth username format parsed in `keystone.authOptionsFromRequest()`:
+
+| Format | Meaning |
+|--------|---------|
+| `user@domain\|project@domain:password` | Qualified user + project scope |
+| `user@domain\|@domainname:password` | Qualified user + domain scope |
+| `user@domain\|projectID:password` | Qualified user + project ID scope |
+| `user@domain:password` | Qualified user, scope guessed or from URL |
+| `userID\|projectID:password` | User ID + project ID scope |
+| `*appCredID:secret` | Application credential by ID |
+| `*appCredName@user@domain:secret` | Application credential by name |
+
+## Dependency Notes
+
+This repo uses `testify/assert`, `spf13/viper`, and `go.uber.org/mock` — all three are flagged as forbidden by SAP CC Go conventions. They are grandfathered in and required by the existing architecture. Do not attempt to remove them without explicit approval. Do not add new forbidden dependencies.
+
 ## Common Pitfalls
 
 - **Don't edit Makefile, .golangci.yaml, .typos.toml, or CI workflows** — they are generated from `Makefile.maker.yaml`. Run `go-makefile-maker` to regenerate.
@@ -232,3 +287,7 @@ password = "globalpassword"
 - **PromQL modification uses AST, not strings** — Always use `util.AddLabelConstraintToExpression()` or `util.AddLabelConstraintToSelector()`. Never manipulate PromQL strings directly.
 - **go-bindata embeds the web UI** — The `pkg/ui/bindata.go` file is generated. If you modify web assets in `web/`, regenerate with `make generate`.
 - **LabelValues uses a synthetic query** — The `/label/{name}/values` endpoint constructs `count({name!=""}) BY (name)` and queries a time range (`label_value_ttl`), not the native Prometheus label API.
+- **`util.init()` replaces `http.DefaultTransport` globally** — When `MAIA_INSECURE=1`, `pkg/util/hacks.go` disables TLS verification for ALL HTTP clients in the process (including gophercloud). Any import of `pkg/util` triggers this.
+- **`NewKeystoneDriverWithSection()` exists** — Used for global keystone initialization (`api/server.go:48`). Not the same as `NewKeystoneDriver()`.
+- **Tests use both `Prometheus()` and `NewPrometheusDriver()`** — `storage.Prometheus()` is the direct constructor used in tests (e.g., `cmd_test.go`). `NewPrometheusDriver()` is the factory that reads `maia.storage_driver` from viper config. Tests that create drivers directly should use `Prometheus()`.
+- **`pkg/cmd` tests require viper defaults** — Tests that call `storageInstance()` or `NewPrometheusDriver()` need `viper.Set("maia.storage_driver", "prometheus")` or the factory panics with "invalid service.storage_driver setting".
