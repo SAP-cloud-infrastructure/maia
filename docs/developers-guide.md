@@ -188,5 +188,5 @@ make build/cover.out # Tests with coverage
 ## Links
 
 [![CI](https://github.com/SAP-cloud-infrastructure/maia/actions/workflows/ci.yaml/badge.svg)](https://github.com/SAP-cloud-infrastructure/maia/actions/workflows/ci.yaml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/sapcc/maia)](https://goreportcard.com/report/github.com/sapcc/maia)
+[![Go Report Card](https://goreportcard.com/badge/github.com/SAP-cloud-infrastructure/maia)](https://goreportcard.com/report/github.com/SAP-cloud-infrastructure/maia)
 
