@@ -151,22 +151,22 @@ Maia supports virtual region querying via a global keystone instance. This allow
 
 To enable global keystone support, add the following to your configuration file:
 
-```yaml
-keystone:
-  auth_url: https://identity-3.example.com/v3
-  username: maia
-  password: secret
-  user_domain_name: Default
-  project_name: service
-  project_domain_name: Default
-  
-global_keystone:
-  auth_url: https://global-identity.example.com/v3
-  username: maia-global
-  password: global-secret
-  user_domain_name: Default
-  project_name: service
-  project_domain_name: Default
+```toml
+[keystone]
+auth_url = "https://identity-3.example.com/v3"
+username = "maia"
+password = "secret"
+user_domain_name = "Default"
+project_name = "service"
+project_domain_name = "Default"
+
+[keystone.global]
+auth_url = "https://global-identity.example.com/v3"
+username = "maia-global"
+password = "global-secret"
+user_domain_name = "Default"
+project_name = "service"
+project_domain_name = "Default"
 ```
 
 ## Starting the Service
@@ -209,7 +209,7 @@ OpenStack projects or domains.
 
 ## Monitoring
 
-Maia offers a Prometheus scrape endpoint at the usual `/metrics` path.
+Maia offers a Prometheus scrape endpoint at the usual `/metrics` path. See [metrics documentation](./metrics.md) for the full list of Maia-specific metrics and their types.
 
 This endpoint includes documentation and type-information for each metric. Refer to the Prometheus web site for more information on [naming conventions](https://prometheus.io/docs/practices/naming/) and [metric types](https://prometheus.io/docs/concepts/metric_types).
 

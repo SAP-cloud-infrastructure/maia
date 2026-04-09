@@ -49,59 +49,45 @@ If you don't use OpenStack, you can still use Maia CLI as a feature-complete she
 
 ## Installation
 
-Maia can be built with Go 1.20. Older versions are not supported. Newer versions are not tested.
-
 ### Binary Releases
 
-Binary releases for Linux and MacOS can be downloaded from the GitHub _releases_ area.
+Binary releases for Linux and MacOS can be downloaded from the GitHub [releases](https://github.com/sapcc/maia/releases) page.
 
-### Installation with make
+### Build from Source
 
-* `make` to compile and run the binaries from the `build/` directory
-* `make && make install` to install to `/usr`
-* `make && make install PREFIX=/some/path` to install to `/some/path`
-* `make docker` to build the Docker image (set image name and tag with the `DOCKER_IMAGE` and `DOCKER_TAG` variables)
+Requires Go (see `go.mod` for the minimum version).
+
+```bash
+make generate   # Code generation (must run first)
+make            # Build binary to build/maia
+make install    # Install to /usr (or PREFIX=/some/path)
+make docker     # Build Docker image
+```
 
 ## Using Maia
 
-Maia can be used via Web-UI or CLI.
-
-Enter `maia --help` to see a list of commands and options.
-
-### Global Region Support
-
-The Maia CLI supports querying metrics from global/virtual regions using the `--global` flag:
+Maia can be used via Web-UI or CLI. Enter `maia --help` to see a list of commands and options.
 
 ```bash
-# Query metrics from the regional backend (default)
-maia query "up"
-
-# Query metrics from the global backend
-maia query "up" --global
-
-# Compare metrics between regional and global
-maia series --selector="job=prometheus"           # Regional
-maia series --selector="job=prometheus" --global  # Global
+maia metric-names                          # List available metrics
+maia query 'up'                            # Run a PromQL query
+maia series --selector='job="endpoints"'   # List time series
+maia query 'up' --global                   # Query global region metrics
 ```
 
-**Note**: The `--global` flag requires that the Maia server is configured with global keystone support. The CLI uses the same environment variables (OS_USERNAME, OS_PASSWORD, etc.) for both regional and global queries - the flag simply tells the server which backend keystone to use.
+Please refer to the [Maia user guide](./docs/users-guide.md) for detailed instructions, including authentication setup, output formatting, Grafana integration, and Prometheus federation.
 
-Please refer to the [Maia user guide](./docs/users-guide.md) for more instructions.
+## For Operators
 
-## Operating Maia
+Deploy Maia as a Kubernetes service using the [Maia Helm chart](https://github.com/sapcc/helm-charts/tree/master/openstack/maia) (includes Maia, Prometheus, and Thanos).
 
-The easiest way to deploy Maia as a service is Kubernetes.
+The [operators guide](./docs/operators-guide.md) covers configuration, Keystone integration, global region setup, exporter requirements, and monitoring.
 
-Feel free to reuse our [Maia helm chart](https://github.com/sapcc/helm-charts/tree/master/openstack/maia)
-which includes Maia, Prometheus and Thanos.
+## For Developers / Contributors
 
-Follow the [Maia operators guide](./docs/operators-guide.md) to learn how to setup the 
-Maia service from scratch and integrate with Prometheus.
-
-## Integrating and Extending Maia
-
-The [Maia developers guide](./docs/developers-guide.md) describes how to use the Maia API. Also
-it contains information how to contribute to the Maia development.
+- **API integration**: The [developers guide](./docs/developers-guide.md) describes the Maia API, authentication schemes, and how to build exporters.
+- **Contributing**: See the [developers guide](./docs/developers-guide.md#contributing) for pull request guidelines and architecture overview.
+- **Releasing**: See [RELEASE.md](./RELEASE.md) for the release process.
 
 ## Support, Feedback, Contributing
 
