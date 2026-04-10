@@ -1,0 +1,5 @@
+{
+  "status": "error",
+  "errorType": "internal",
+  "error": "cannot process LabelValues response: expected matrix result type, got vector"
+}

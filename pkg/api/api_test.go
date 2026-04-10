@@ -351,6 +351,32 @@ func TestLabelValues(t *testing.T) {
 	}.Check(t, router)
 }
 
+// TestLabelValues_errorNonMatrixResult verifies that LabelValues returns a 502
+// error (not a panic) when the backing Prometheus query_range returns a
+// non-matrix result type (e.g. a vector). Before the fix, the bare type
+// assertion sr.Data.Value.(model.Matrix) in LabelValues would panic for any
+// non-matrix Value.
+func TestLabelValues_errorNonMatrixResult(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	router, keystoneMock, storageMock := setupTest(t, ctrl)
+
+	expectAuthByProjectID(keystoneMock)
+	storageMock.EXPECT().QueryRange(
+		"count by (service) ({project_id=\"12345\",service!=\"\"})",
+		test.TimeStringMatcher{}, test.TimeStringMatcher{},
+		viper.Get("maia.label_value_ttl"), "", storage.JSON,
+	).Return(test.HTTPResponseFromFile("fixtures/label_values_query_range_vector.json"), nil)
+
+	test.APIRequest{
+		Headers:          map[string]string{"Authorization": base64.StdEncoding.EncodeToString([]byte("Basic user_id|12345:password")), "Accept": storage.JSON},
+		Method:           "GET",
+		Path:             "/api/v1/label/service/values",
+		ExpectStatusCode: http.StatusBadGateway,
+		ExpectJSON:       "fixtures/label_values_nonmatrix_error.json",
+	}.Check(t, router)
+}
+
 func TestQuery(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
