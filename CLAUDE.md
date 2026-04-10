@@ -109,7 +109,7 @@ All `OS_*` environment variables are supported (e.g., `OS_AUTH_URL`, `OS_USERNAM
 | GET | `/api/v1/query_range` | `metric:show` | Range PromQL query |
 | GET | `/api/v1/series` | `metric:list` | List time series |
 | GET | `/api/v1/label/{name}/values` | `metric:list` | Label values |
-| GET | `/api/v1/labels` | — | **Not registered** (handler exists as dead code in `v1api.go` but no route) |
+| GET | `/api/v1/labels` | `metric:list` | List label names (tenant-aware via `buildSelectors`) |
 | GET | `/federate` | `metric:show` | Prometheus federation endpoint |
 | GET | `/{domain}/graph` | (basic auth) | Expression browser UI |
 | GET | `/metrics` | (none) | Prometheus metrics scrape |
