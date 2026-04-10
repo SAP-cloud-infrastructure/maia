@@ -49,6 +49,7 @@ renovate:
 reuse:
   annotations:
     - paths:
+      - CLAUDE.md
       - build/*.txt
       - build/*.out
       - etc/*.conf
