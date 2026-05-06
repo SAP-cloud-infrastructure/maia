@@ -145,8 +145,8 @@ github.com/rs/cors v1.11.1/go.mod h1:XyqrcTp5zjWr1wsJ8PIRZssZ8b/WMcMf71DJnit4EMU
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/sagikazarmark/locafero v0.7.0 h1:5MqpDsTGNDhY8sGp0Aowyf0qKsPrhewaLSsFaodPcyo=
 github.com/sagikazarmark/locafero v0.7.0/go.mod h1:2za3Cg5rMaTMoG/2Ulr9AwtFaIppKXTRYnozin4aB5k=
-github.com/sapcc/go-bits v0.0.0-20260423021225-fb5e4523b6c5 h1:Ynw89El0yMVQnKOaBVwgSoB7FZVNbwxmuH3DQqofNWI=
-github.com/sapcc/go-bits v0.0.0-20260423021225-fb5e4523b6c5/go.mod h1:ISqYagZwY8jfyy5gwEk3CjAUi9J+KOsAdRiQxu3eglU=
+github.com/sapcc/go-bits v0.0.0-20260504092817-9df533508379 h1:NJ1gqb2S4CNrdsCk90iM3TTG9QXKrrgb/tG3sxuzxfw=
+github.com/sapcc/go-bits v0.0.0-20260504092817-9df533508379/go.mod h1:DxXen6GflUaHbQ9qQFwxJp4xQWzRKm3mzUgGrXbwn84=
 github.com/sourcegraph/conc v0.3.0 h1:OQTbbt6P72L20UqAkXXuLOj79LfEanQ+YQFNpLA9ySo=
 github.com/sourcegraph/conc v0.3.0/go.mod h1:Sdozi7LEKbFPqYX2/J+iBAM6HpqSLTASQIKqDmF7Mt0=
 github.com/spf13/afero v1.12.0 h1:UcOPyRBYczmFn6yvphxkn9ZEOY65cpwGKb5mL36mrqs=
