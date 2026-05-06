@@ -144,7 +144,7 @@ func redirectToDomainRootPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logg.Debug("Redirecting %s to %s", r.URL.Path, target)
-	http.Redirect(w, r, target, http.StatusFound)
+	http.Redirect(w, r, target, http.StatusFound) //nolint:gosec // G710: r.Host is set by the reverse proxy, not user-controlled
 }
 
 // redirectToRootPage will redirect users to the global start page
@@ -171,7 +171,7 @@ func redirectToRootPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logg.Debug("Redirecting to %s", target)
-	http.Redirect(w, r, target, http.StatusFound)
+	http.Redirect(w, r, target, http.StatusFound) //nolint:gosec // G710: r.Host is set by the reverse proxy, not user-controlled
 }
 
 // serveStaticContent serves all the static assets of the web UI (pages, js, images)
