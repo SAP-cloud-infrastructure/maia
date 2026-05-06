@@ -12,13 +12,17 @@ import (
 	"github.com/prometheus/prometheus/promql/parser"
 )
 
+// promqlParser is a package-level parser instance used for all PromQL parsing.
+// It is stateless and safe for concurrent use.
+var promqlParser = parser.NewParser(parser.Options{})
+
 // AddLabelConstraintToExpression enhances a PromQL expression to limit it to series matching a certain label.
 // The function takes three parameters:
 // 1. expression: The original PromQL expression.
 // 2. key: The label key used to limit the series.
 // 3. values: The label values that the series should match.
 func AddLabelConstraintToExpression(expression, key string, values []string) (string, error) {
-	exprNode, err := parser.ParseExpr(expression)
+	exprNode, err := promqlParser.ParseExpr(expression)
 	if err != nil {
 		return "", err
 	}
@@ -54,7 +58,7 @@ func AddLabelConstraintToSelector(metricSelector, key string, values []string) (
 	// Parse the metric selector to obtain existing label matchers
 	var labelMatchers []*labels.Matcher
 	if metricSelector != "{}" {
-		labelMatchers, err = parser.ParseMetricSelector(metricSelector)
+		labelMatchers, err = promqlParser.ParseMetricSelector(metricSelector)
 	} else {
 		labelMatchers = make([]*labels.Matcher, 0)
 	}
