@@ -176,10 +176,29 @@ func scopeToLabelConstraint(req *http.Request, keystoneDriver keystone.Driver) (
 	panic(errors.New("missing OpenStack scope attributes in request header"))
 }
 
+// appendSentinelValue appends the configured global visibility sentinel to the
+// label values list. This causes scope injection to include the sentinel in the
+// regex (e.g. project_id=~"p1|p2|all"), making metrics with the sentinel value
+// visible to all tenants. Returns the original slice unchanged if no sentinel
+// is configured. The sentinel is resolved once at startup (see server.go).
+//
+// INVARIANT: This function must be called after every scopeToLabelConstraint() call
+// in tenant-aware handlers. Failing to call it means global metrics won't be visible.
+func appendSentinelValue(labelValues []string) []string {
+	if sentinelValue != "" {
+		result := make([]string, len(labelValues)+1)
+		copy(result, labelValues)
+		result[len(result)-1] = sentinelValue
+		return result
+	}
+	return labelValues
+}
+
 // buildSelectors takes the selectors contained in the "match[]" URL query parameter(s)
 // and extends them with a label-constrained for the project/domain scope
 func buildSelectors(req *http.Request, keystoneDriver keystone.Driver) (*[]string, error) {
 	labelKey, labelValues := scopeToLabelConstraint(req, keystoneDriver)
+	labelValues = appendSentinelValue(labelValues)
 
 	queryParams := req.URL.Query()
 	selectors := queryParams["match[]"]

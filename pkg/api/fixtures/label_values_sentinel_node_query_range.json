@@ -1,0 +1,30 @@
+{
+    "status": "success",
+    "data": {
+        "resultType": "matrix",
+        "result": [
+            {
+                "metric": {
+                    "node": "worker-1"
+                },
+                "values": [
+                    [
+                        1567641600,
+                        "5"
+                    ]
+                ]
+            },
+            {
+                "metric": {
+                    "node": "worker-2"
+                },
+                "values": [
+                    [
+                        1567641600,
+                        "3"
+                    ]
+                ]
+            }
+        ]
+    }
+}
