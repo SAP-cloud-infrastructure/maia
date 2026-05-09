@@ -69,7 +69,6 @@ func (p *v1Provider) Query(w http.ResponseWriter, req *http.Request) {
 	}
 
 	labelKey, labelValue := scopeToLabelConstraint(req, ks)
-	labelValue = appendSentinelValue(labelValue)
 
 	queryParams := req.URL.Query()
 	originalQuery := queryParams.Get("query")
@@ -102,7 +101,6 @@ func (p *v1Provider) QueryRange(w http.ResponseWriter, req *http.Request) {
 	}
 
 	labelKey, labelValue := scopeToLabelConstraint(req, ks)
-	labelValue = appendSentinelValue(labelValue)
 
 	queryParams := req.URL.Query()
 	newQuery, err := util.AddLabelConstraintToExpression(queryParams.Get("query"), labelKey, labelValue)
@@ -139,7 +137,6 @@ func (p *v1Provider) LabelValues(w http.ResponseWriter, req *http.Request) {
 
 	// build project_id constraint using project hierarchy
 	labelKey, labelValues := scopeToLabelConstraint(req, ks)
-	labelValues = appendSentinelValue(labelValues)
 	// make a broad range query and aggregate by requested label. Use count() as cheap aggregation function.
 	query, err := util.AddLabelConstraintToExpression("count({"+string(name)+"!=\"\"}) BY ("+string(name)+")", labelKey, labelValues)
 	if err != nil {

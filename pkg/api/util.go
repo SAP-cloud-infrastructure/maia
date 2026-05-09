@@ -166,30 +166,20 @@ func scopeToLabelConstraint(req *http.Request, keystoneDriver keystone.Driver) (
 		logg.Debug("[SCOPE_DEBUG] ChildProjects for %s returned: %v", projectID, children)
 		allProjects := append([]string{projectID}, children...)
 		logg.Debug("[SCOPE_DEBUG] Final project list: %v", allProjects)
-		return "project_id", allProjects
+		return "project_id", appendSentinelValue(allProjects)
 	} else if domainID := req.Header.Get("X-Domain-Id"); domainID != "" {
 		logg.Debug("[SCOPE_DEBUG] Found X-Domain-Id: %s", domainID)
-		return "domain_id", []string{domainID}
+		return "domain_id", appendSentinelValue([]string{domainID})
 	}
 
 	logg.Error("[SCOPE_DEBUG] No X-Project-Id or X-Domain-Id found in headers")
 	panic(errors.New("missing OpenStack scope attributes in request header"))
 }
 
-// appendSentinelValue appends the configured global visibility sentinel to the
-// label values list. This causes scope injection to include the sentinel in the
-// regex (e.g. project_id=~"p1|p2|all"), making metrics with the sentinel value
-// visible to all tenants. Returns the original slice unchanged if no sentinel
-// is configured. The sentinel is resolved once at startup (see server.go).
-//
-// INVARIANT: This function must be called after every scopeToLabelConstraint() call
-// in tenant-aware handlers. Failing to call it means global metrics won't be visible.
+// appendSentinelValue appends the configured global visibility sentinel to the label values list.
 func appendSentinelValue(labelValues []string) []string {
 	if sentinelValue != "" {
-		result := make([]string, len(labelValues)+1)
-		copy(result, labelValues)
-		result[len(result)-1] = sentinelValue
-		return result
+		return append(labelValues, sentinelValue)
 	}
 	return labelValues
 }
@@ -198,7 +188,6 @@ func appendSentinelValue(labelValues []string) []string {
 // and extends them with a label-constrained for the project/domain scope
 func buildSelectors(req *http.Request, keystoneDriver keystone.Driver) (*[]string, error) {
 	labelKey, labelValues := scopeToLabelConstraint(req, keystoneDriver)
-	labelValues = appendSentinelValue(labelValues)
 
 	queryParams := req.URL.Query()
 	selectors := queryParams["match[]"]
