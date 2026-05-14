@@ -105,6 +105,11 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 
 	// domain-prefixed paths. Order is relevant! This implies that there must be no domain federate, static or graph :-)
 	mainRouter.Methods(http.MethodGet).Path("/{domain}/graph").HandlerFunc(authorize(observeDuration(observeResponseSize(graph, "graph"), "graph"), true, "metric:show"))
+	// POST-based token login: accepts token in request body instead of URL query parameter.
+	// This avoids exposing tokens in URLs (browser history, server logs, Referrer headers).
+	// After successful auth (handled by authorize middleware which sets the cookie),
+	// redirects to the dashboard.
+	mainRouter.Methods(http.MethodPost).Path("/{domain}/auth").HandlerFunc(authorize(observeDuration(tokenLogin, "auth"), true, "metric:show"))
 	mainRouter.Methods(http.MethodGet).Path("/{domain}").HandlerFunc(redirectToDomainRootPage)
 
 	// provide the inflight metrics for all paths
@@ -227,6 +232,19 @@ func Federate(w http.ResponseWriter, req *http.Request) {
 	}
 
 	ReturnResponse(w, response)
+}
+
+// tokenLogin handles POST /{domain}/auth for secure token handoff.
+// The authorize middleware has already validated the token and set the auth cookie.
+// This handler simply redirects to the dashboard.
+func tokenLogin(w http.ResponseWriter, req *http.Request) {
+	domain, ok := mux.Vars(req)["domain"]
+	if !ok || !validDomain.MatchString(domain) {
+		http.Error(w, "Invalid domain", http.StatusBadRequest)
+		return
+	}
+	// Redirect to the expression browser (cookie is already set by authorize middleware)
+	http.Redirect(w, req, "/"+url.PathEscape(domain)+"/graph", http.StatusSeeOther)
 }
 
 // graph returns the Prometheus UI page

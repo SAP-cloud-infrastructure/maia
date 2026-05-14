@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"errors"
@@ -660,4 +661,96 @@ func TestRedirectPreservesGlobalFlag(t *testing.T) {
 		location := resp.Header.Get("Location")
 		assert.Contains(t, location, "global=true", "Redirect should add global flag from header")
 	})
+}
+
+func TestTokenLogin_success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	router, keystoneMock, _ := setupTest(t, ctrl)
+
+	// The POST /auth endpoint uses guessScope=true like the graph endpoint.
+	// Include X-Auth-Token in injected headers so setAuthCookies() can set the cookie.
+	headerWithToken := map[string]string{
+		"X-User-Id":          projectContext.Auth["user_id"],
+		"X-User-Name":        projectContext.Auth["user_name"],
+		"X-User-Domain-Name": projectContext.Auth["user_domain_name"],
+		"X-Project-Id":       projectContext.Auth["project_id"],
+		"X-Project-Name":     projectContext.Auth["project_name"],
+		"X-Auth-Token":       "someverylongtokenideed",
+	}
+	httpReqMatcher := test.HTTPRequestMatcher{InjectHeader: headerWithToken}
+	keystoneMock.EXPECT().AuthenticateRequest(test.MatchContext(), httpReqMatcher, true).Return(projectContext, nil)
+
+	// POST form body with x-auth-token (the secure alternative to URL query param)
+	req := httptest.NewRequest(http.MethodPost, "/testdomain/auth", strings.NewReader("x-auth-token=someverylongtokenideed"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	resp := recorder.Result()
+	defer resp.Body.Close()
+
+	// Expect 303 See Other redirect to the graph page
+	assert.Equal(t, http.StatusSeeOther, resp.StatusCode, "Expected redirect to graph")
+
+	// Check redirect target
+	location := resp.Header.Get("Location")
+	assert.Equal(t, "/testdomain/graph", location, "Should redirect to domain graph page")
+
+	// Check that auth cookie was set
+	cookies := resp.Cookies()
+	var tokenCookie *http.Cookie
+	for _, c := range cookies {
+		if c.Name == "X-Auth-Token" {
+			tokenCookie = c
+			break
+		}
+	}
+	assert.NotNil(t, tokenCookie, "Auth cookie should be set")
+	if tokenCookie != nil {
+		assert.True(t, tokenCookie.HttpOnly, "Cookie should be HttpOnly")
+		assert.True(t, tokenCookie.Secure, "Cookie should be Secure")
+	}
+}
+
+func TestTokenLogin_failAuth(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	router, keystoneMock, _ := setupTest(t, ctrl)
+
+	httpReqMatcher := test.HTTPRequestMatcher{InjectHeader: projectHeader}
+	keystoneMock.EXPECT().AuthenticateRequest(test.MatchContext(), httpReqMatcher, true).Return(nil, keystone.NewAuthenticationError(keystone.StatusWrongCredentials, "invalid token"))
+
+	req := httptest.NewRequest(http.MethodPost, "/testdomain/auth", strings.NewReader("x-auth-token=invalidtoken"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	resp := recorder.Result()
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "Invalid token should return 401")
+}
+
+func TestTokenLogin_noToken(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	router, keystoneMock, _ := setupTest(t, ctrl)
+
+	// With no token in POST body and no other credentials, auth should fail
+	httpReqMatcher := test.HTTPRequestMatcher{InjectHeader: projectHeader}
+	keystoneMock.EXPECT().AuthenticateRequest(test.MatchContext(), httpReqMatcher, true).Return(nil, keystone.NewAuthenticationError(keystone.StatusMissingCredentials, "Authorization header missing"))
+
+	req := httptest.NewRequest(http.MethodPost, "/testdomain/auth", strings.NewReader(""))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	resp := recorder.Result()
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "Missing token should return 401")
 }

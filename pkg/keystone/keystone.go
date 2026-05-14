@@ -421,10 +421,23 @@ func (d *keystone) authOptionsFromRequest(ctx context.Context, r *http.Request, 
 		ba.TokenID = token
 	} else if token := query.Get("x-auth-token"); token != "" {
 		// perfect: we have a token and thus a authorization scope (albeit in lower-case)
+		logg.Info("DEPRECATION: token passed via URL query parameter; use POST /%s/auth or X-Auth-Token header instead", r.URL.Path)
 		ba.TokenID = token
 		// relocate to header
 		query.Del("x-auth-token")
 		r.Header.Set("X-Auth-Token", ba.TokenID)
+	} else if r.Method == http.MethodPost && r.Body != nil {
+		// Secure alternative: token submitted via POST body (avoids URL exposure).
+		// Limit body size to prevent memory exhaustion — a Keystone token is ~200 bytes.
+		r.Body = http.MaxBytesReader(nil, r.Body, 16*1024)
+		if token := r.PostFormValue("x-auth-token"); token != "" {
+			ba.TokenID = token
+			r.Header.Set("X-Auth-Token", ba.TokenID)
+		}
+	}
+
+	if ba.TokenID != "" {
+		// Token was found (via header, URL query, or POST body) — skip other auth methods
 	} else if (appCredID != "" && appCredSecret != "") || (appCredName != "" && appCredUserName != "") {
 		ba.ApplicationCredentialID = appCredID
 		ba.ApplicationCredentialName = appCredName
