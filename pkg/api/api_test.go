@@ -754,3 +754,61 @@ func TestTokenLogin_noToken(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, "Missing token should return 401")
 }
+
+func TestTokenLogin_bodyTooLarge(t *testing.T) {
+	prometheus.DefaultRegisterer = prometheus.NewPedanticRegistry()
+	keystoneInstance = nil
+	globalKeystoneInstance = nil
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockKeystone := keystone.NewMockDriver(ctrl)
+	mockStorage := storage.NewMockDriver(ctrl)
+
+	// With a too-large body, ParseForm fails, no token extracted,
+	// so AuthenticateRequest is called with no credentials and should return error.
+	mockKeystone.EXPECT().ServiceURL().Return("http://localhost:9091").AnyTimes()
+	mockKeystone.EXPECT().AuthenticateRequest(gomock.Any(), gomock.Any(), true).Return(
+		nil, keystone.NewAuthenticationError(keystone.StatusMissingCredentials, "missing credentials"))
+
+	router := setupRouter(mockKeystone, nil, mockStorage)
+
+	// Create body larger than 16KB
+	largeBody := strings.Repeat("x-auth-token=", 2000) // ~26KB
+	req := httptest.NewRequest(http.MethodPost, "/testdomain/auth", strings.NewReader(largeBody))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// Should get 401 (missing credentials) since token extraction failed
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestTokenLogin_wrongContentType(t *testing.T) {
+	prometheus.DefaultRegisterer = prometheus.NewPedanticRegistry()
+	keystoneInstance = nil
+	globalKeystoneInstance = nil
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockKeystone := keystone.NewMockDriver(ctrl)
+	mockStorage := storage.NewMockDriver(ctrl)
+
+	// With wrong Content-Type, body is not parsed, no token found → missing credentials
+	mockKeystone.EXPECT().ServiceURL().Return("http://localhost:9091").AnyTimes()
+	mockKeystone.EXPECT().AuthenticateRequest(gomock.Any(), gomock.Any(), true).Return(
+		nil, keystone.NewAuthenticationError(keystone.StatusMissingCredentials, "missing credentials"))
+
+	router := setupRouter(mockKeystone, nil, mockStorage)
+
+	body := `{"x-auth-token": "someverylongtokenideed"}`
+	req := httptest.NewRequest(http.MethodPost, "/testdomain/auth", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// Should get 401 — JSON body not parsed as form data
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}

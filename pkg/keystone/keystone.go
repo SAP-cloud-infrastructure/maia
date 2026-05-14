@@ -5,6 +5,7 @@ package keystone
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"net/http"
@@ -426,12 +427,18 @@ func (d *keystone) authOptionsFromRequest(ctx context.Context, r *http.Request, 
 		// relocate to header
 		query.Del("x-auth-token")
 		r.Header.Set("X-Auth-Token", ba.TokenID)
-	} else if r.Method == http.MethodPost && r.Body != nil {
+	} else if r.Method == http.MethodPost && r.Body != nil &&
+		strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
 		// Secure alternative: token submitted via POST body (avoids URL exposure).
 		// Limit body size to prevent memory exhaustion — a Keystone token is ~200 bytes.
 		r.Body = http.MaxBytesReader(nil, r.Body, 16*1024)
 		if err := r.ParseForm(); err != nil {
-			logg.Info("POST body parse failed for %s: %v", r.URL.Path, err)
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
+				logg.Error("POST body exceeds size limit on %s", r.URL.Path)
+			} else {
+				logg.Info("POST body parse failed for %s: %v", r.URL.Path, err)
+			}
 			// Fall through — will hit "missing credentials" path below
 		} else if token := r.PostForm.Get("x-auth-token"); token != "" {
 			ba.TokenID = token

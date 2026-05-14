@@ -240,6 +240,7 @@ func Federate(w http.ResponseWriter, req *http.Request) {
 func tokenLogin(w http.ResponseWriter, req *http.Request) {
 	domain, ok := mux.Vars(req)["domain"]
 	if !ok || !validDomain.MatchString(domain) {
+		logg.Debug("Invalid domain in token login: %s", domain)
 		http.Error(w, "Invalid domain", http.StatusBadRequest)
 		return
 	}
