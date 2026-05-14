@@ -243,6 +243,7 @@ func tokenLogin(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "Invalid domain", http.StatusBadRequest)
 		return
 	}
+	logg.Debug("Token login redirect for domain %s", domain)
 	// Redirect to the expression browser (cookie is already set by authorize middleware)
 	http.Redirect(w, req, "/"+url.PathEscape(domain)+"/graph", http.StatusSeeOther)
 }

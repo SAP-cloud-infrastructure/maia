@@ -421,7 +421,7 @@ func (d *keystone) authOptionsFromRequest(ctx context.Context, r *http.Request, 
 		ba.TokenID = token
 	} else if token := query.Get("x-auth-token"); token != "" {
 		// perfect: we have a token and thus a authorization scope (albeit in lower-case)
-		logg.Info("DEPRECATION: token passed via URL query parameter; use POST /%s/auth or X-Auth-Token header instead", r.URL.Path)
+		logg.Info("DEPRECATION: token passed via URL query parameter on %s; migrate to POST /{domain}/auth or X-Auth-Token header", r.URL.Path)
 		ba.TokenID = token
 		// relocate to header
 		query.Del("x-auth-token")
@@ -430,9 +430,14 @@ func (d *keystone) authOptionsFromRequest(ctx context.Context, r *http.Request, 
 		// Secure alternative: token submitted via POST body (avoids URL exposure).
 		// Limit body size to prevent memory exhaustion — a Keystone token is ~200 bytes.
 		r.Body = http.MaxBytesReader(nil, r.Body, 16*1024)
-		if token := r.PostFormValue("x-auth-token"); token != "" {
+		if err := r.ParseForm(); err != nil {
+			logg.Info("POST body parse failed for %s: %v", r.URL.Path, err)
+			// Fall through — will hit "missing credentials" path below
+		} else if token := r.PostForm.Get("x-auth-token"); token != "" {
 			ba.TokenID = token
 			r.Header.Set("X-Auth-Token", ba.TokenID)
+		} else {
+			logg.Debug("POST body present but no x-auth-token field for %s", r.URL.Path)
 		}
 	}
 
