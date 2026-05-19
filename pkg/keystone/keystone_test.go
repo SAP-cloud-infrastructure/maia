@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -669,4 +670,144 @@ func TestAuthenticateWithContextualCache(t *testing.T) {
 
 	t.Log("✓ Authenticate method contextual cache behavior verified")
 	t.Log("✓ Cache isolation prevents authorization context leakage")
+}
+
+// TestAuthOptionsFromRequest_PostForm exercises the POST form-encoded body
+// branch of authOptionsFromRequest directly. The api package tests mock
+// AuthenticateRequest, which bypasses this code path; this test gives it
+// real coverage. See PR #224 review feedback.
+func TestAuthOptionsFromRequest_PostForm(t *testing.T) {
+	defer gock.Off()
+	driver := setupTest()
+	ks, ok := driver.(*keystone)
+	assert.True(t, ok, "expected *keystone driver")
+
+	const formToken = "form-body-token-AAAAAAA"
+
+	tests := []struct {
+		name        string
+		method      string
+		contentType string
+		body        string
+		preHeader   string
+		wantToken   string
+		wantHeader  string
+		wantErr     bool // expect "missing credentials" error when no auth material at all
+	}{
+		{
+			name:        "POST form sets token and X-Auth-Token header",
+			method:      http.MethodPost,
+			contentType: "application/x-www-form-urlencoded",
+			body:        "x-auth-token=" + formToken,
+			wantToken:   formToken,
+			wantHeader:  formToken,
+		},
+		{
+			name:        "Content-Type is case-insensitive (RFC 9110)",
+			method:      http.MethodPost,
+			contentType: "Application/X-WWW-Form-Urlencoded; charset=utf-8",
+			body:        "x-auth-token=" + formToken,
+			wantToken:   formToken,
+			wantHeader:  formToken,
+		},
+		{
+			name:        "POST without x-auth-token field yields no token",
+			method:      http.MethodPost,
+			contentType: "application/x-www-form-urlencoded",
+			body:        "other=value",
+			wantToken:   "",
+			wantHeader:  "",
+			wantErr:     true,
+		},
+		{
+			name:        "non-POST method ignores body",
+			method:      http.MethodGet,
+			contentType: "application/x-www-form-urlencoded",
+			body:        "x-auth-token=" + formToken,
+			wantToken:   "",
+			wantHeader:  "",
+			wantErr:     true,
+		},
+		{
+			name:        "wrong Content-Type ignores body",
+			method:      http.MethodPost,
+			contentType: "application/json",
+			body:        `{"x-auth-token":"` + formToken + `"}`,
+			wantToken:   "",
+			wantHeader:  "",
+			wantErr:     true,
+		},
+		{
+			name:        "existing X-Auth-Token header beats POST body",
+			method:      http.MethodPost,
+			contentType: "application/x-www-form-urlencoded",
+			body:        "x-auth-token=" + formToken,
+			preHeader:   "header-token-XXXXXXX",
+			wantToken:   "header-token-XXXXXXX",
+			wantHeader:  "header-token-XXXXXXX",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, "http://maia.local/testdomain/auth", strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", tc.contentType)
+			if tc.preHeader != "" {
+				req.Header.Set("X-Auth-Token", tc.preHeader)
+			}
+
+			opts, err := ks.authOptionsFromRequest(t.Context(), req, true)
+			if tc.wantErr {
+				assert.NotNil(t, err, "expected missing-credentials error")
+				assert.Equal(t, tc.wantHeader, req.Header.Get("X-Auth-Token"), "X-Auth-Token header mismatch")
+				return
+			}
+			assert.Nil(t, err, "authOptionsFromRequest must not error")
+			assert.NotNil(t, opts)
+			assert.Equal(t, tc.wantToken, opts.TokenID, "TokenID mismatch")
+			assert.Equal(t, tc.wantHeader, req.Header.Get("X-Auth-Token"), "X-Auth-Token header mismatch")
+		})
+	}
+}
+
+// TestAuthOptionsFromRequest_PostFormBodyTooLarge verifies that a POST body
+// exceeding the 16KB limit is rejected by MaxBytesReader, no token is
+// extracted, and the request falls through to the missing-credentials path.
+func TestAuthOptionsFromRequest_PostFormBodyTooLarge(t *testing.T) {
+	defer gock.Off()
+	driver := setupTest()
+	ks, ok := driver.(*keystone)
+	assert.True(t, ok, "expected *keystone driver")
+
+	// 17KB body > 16KB MaxBytesReader limit
+	largeBody := "x-auth-token=" + strings.Repeat("A", 17*1024)
+	req := httptest.NewRequest(http.MethodPost, "http://maia.local/testdomain/auth", strings.NewReader(largeBody))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	_, err := ks.authOptionsFromRequest(t.Context(), req, true)
+	assert.NotNil(t, err, "oversize body must yield missing-credentials error after ParseForm fails")
+	assert.Equal(t, "", req.Header.Get("X-Auth-Token"), "X-Auth-Token must not be set from oversize body")
+}
+
+// Test_isFormURLEncoded asserts the helper handles RFC 9110 §8.3.1
+// case-insensitive media types and tolerates parameters.
+func Test_isFormURLEncoded(t *testing.T) {
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"application/x-www-form-urlencoded", true},
+		{"Application/X-WWW-Form-Urlencoded", true},
+		{"application/x-www-form-urlencoded; charset=utf-8", true},
+		{"APPLICATION/X-WWW-FORM-URLENCODED;CHARSET=UTF-8", true},
+		{"application/json", false},
+		{"text/plain", false},
+		{"", false},
+		{"not a media type", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			assert.Equal(t, tc.want, isFormURLEncoded(tc.in))
+		})
+	}
 }

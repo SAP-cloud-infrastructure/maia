@@ -812,3 +812,172 @@ func TestTokenLogin_wrongContentType(t *testing.T) {
 	// Should get 401 — JSON body not parsed as form data
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
+
+// TestTokenLogin_caseInsensitiveContentType verifies that POST /{domain}/auth
+// accepts an upper-cased Content-Type with parameters, per RFC 9110 §8.3.1.
+func TestTokenLogin_caseInsensitiveContentType(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	router, keystoneMock, _ := setupTest(t, ctrl)
+
+	headerWithToken := map[string]string{
+		"X-User-Id":          projectContext.Auth["user_id"],
+		"X-User-Name":        projectContext.Auth["user_name"],
+		"X-User-Domain-Name": projectContext.Auth["user_domain_name"],
+		"X-Project-Id":       projectContext.Auth["project_id"],
+		"X-Project-Name":     projectContext.Auth["project_name"],
+		"X-Auth-Token":       "someverylongtokenideed",
+	}
+	httpReqMatcher := test.HTTPRequestMatcher{InjectHeader: headerWithToken}
+	keystoneMock.EXPECT().AuthenticateRequest(test.MatchContext(), httpReqMatcher, true).Return(projectContext, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/testdomain/auth", strings.NewReader("x-auth-token=someverylongtokenideed"))
+	// Mixed-case media type with charset parameter — must still be parsed as form-encoded.
+	req.Header.Set("Content-Type", "Application/X-WWW-Form-Urlencoded; charset=utf-8")
+
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	resp := recorder.Result()
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusSeeOther, resp.StatusCode, "Mixed-case Content-Type should be accepted")
+	assert.Equal(t, "/testdomain/graph", resp.Header.Get("Location"))
+}
+
+// TestTokenLogin_redirectPreservesGlobalParam verifies that ?global=true on the
+// POST /{domain}/auth request is propagated to the redirected GET so the
+// follow-up dashboard load binds to the same Keystone backend.
+func TestTokenLogin_redirectPreservesGlobalParam(t *testing.T) {
+	prometheus.DefaultRegisterer = prometheus.NewPedanticRegistry()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockKeystone := keystone.NewMockDriver(ctrl)
+	mockGlobalKeystone := keystone.NewMockDriver(ctrl)
+	mockStorage := storage.NewMockDriver(ctrl)
+
+	mockGlobalKeystone.EXPECT().ServiceURL().Return("http://global-maia").AnyTimes()
+	headerWithToken := map[string]string{
+		"X-User-Id":          projectContext.Auth["user_id"],
+		"X-User-Name":        projectContext.Auth["user_name"],
+		"X-User-Domain-Name": projectContext.Auth["user_domain_name"],
+		"X-Project-Id":       projectContext.Auth["project_id"],
+		"X-Project-Name":     projectContext.Auth["project_name"],
+		"X-Auth-Token":       "freshglobaltoken",
+	}
+	httpReqMatcher := test.HTTPRequestMatcher{InjectHeader: headerWithToken}
+	mockGlobalKeystone.EXPECT().AuthenticateRequest(test.MatchContext(), httpReqMatcher, true).Return(projectContext, nil)
+
+	viper.Set("keystone.policy_file", "../test/policy.json")
+	viper.Set("maia.label_value_ttl", "72h")
+	router := setupRouter(mockKeystone, mockGlobalKeystone, mockStorage)
+
+	req := httptest.NewRequest(http.MethodPost, "/testdomain/auth?global=true", strings.NewReader("x-auth-token=freshglobaltoken"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	resp := recorder.Result()
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusSeeOther, resp.StatusCode)
+	location := resp.Header.Get("Location")
+	assert.Contains(t, location, "/testdomain/graph", "redirect target must point to the dashboard")
+	assert.Contains(t, location, "global=true", "redirect must preserve the global selector")
+}
+
+// TestTokenLogin_redirectPreservesGlobalHeader verifies that an
+// X-Global-Region header on the POST is converted into ?global=true on the
+// redirect target, matching parseGlobalRequest precedence.
+func TestTokenLogin_redirectPreservesGlobalHeader(t *testing.T) {
+	prometheus.DefaultRegisterer = prometheus.NewPedanticRegistry()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockKeystone := keystone.NewMockDriver(ctrl)
+	mockGlobalKeystone := keystone.NewMockDriver(ctrl)
+	mockStorage := storage.NewMockDriver(ctrl)
+
+	mockGlobalKeystone.EXPECT().ServiceURL().Return("http://global-maia").AnyTimes()
+	headerWithToken := map[string]string{
+		"X-User-Id":          projectContext.Auth["user_id"],
+		"X-User-Name":        projectContext.Auth["user_name"],
+		"X-User-Domain-Name": projectContext.Auth["user_domain_name"],
+		"X-Project-Id":       projectContext.Auth["project_id"],
+		"X-Project-Name":     projectContext.Auth["project_name"],
+		"X-Auth-Token":       "freshglobaltoken",
+	}
+	httpReqMatcher := test.HTTPRequestMatcher{InjectHeader: headerWithToken}
+	mockGlobalKeystone.EXPECT().AuthenticateRequest(test.MatchContext(), httpReqMatcher, true).Return(projectContext, nil)
+
+	viper.Set("keystone.policy_file", "../test/policy.json")
+	viper.Set("maia.label_value_ttl", "72h")
+	router := setupRouter(mockKeystone, mockGlobalKeystone, mockStorage)
+
+	req := httptest.NewRequest(http.MethodPost, "/testdomain/auth", strings.NewReader("x-auth-token=freshglobaltoken"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-Global-Region", "true")
+
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	resp := recorder.Result()
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusSeeOther, resp.StatusCode)
+	assert.Contains(t, resp.Header.Get("Location"), "global=true",
+		"X-Global-Region header must be propagated to the redirect query string")
+}
+
+// TestTokenLogin_staleCookieDoesNotShadowFormToken verifies that a stale
+// X-Auth-Token cookie sent with the POST /{domain}/auth handoff request does
+// NOT pre-empt the fresh token in the form body. The keystone driver must
+// receive the body token, not the cookie.
+func TestTokenLogin_staleCookieDoesNotShadowFormToken(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	router, keystoneMock, _ := setupTest(t, ctrl)
+
+	const freshToken = "FRESH_token_from_form_body"
+	const staleCookieToken = "STALE_token_from_old_cookie"
+
+	headerWithToken := map[string]string{
+		"X-User-Id":          projectContext.Auth["user_id"],
+		"X-User-Name":        projectContext.Auth["user_name"],
+		"X-User-Domain-Name": projectContext.Auth["user_domain_name"],
+		"X-Project-Id":       projectContext.Auth["project_id"],
+		"X-Project-Name":     projectContext.Auth["project_name"],
+		"X-Auth-Token":       freshToken,
+	}
+	// ExpectHeader asserts the request handed to AuthenticateRequest has NO
+	// X-Auth-Token at this stage (that header is set inside authOptionsFromRequest
+	// from the parsed form body, not by the api-level cookie promotion).
+	httpReqMatcher := test.HTTPRequestMatcher{
+		ExpectHeader: map[string]string{"X-Auth-Token": "^$"},
+		InjectHeader: headerWithToken,
+	}
+	keystoneMock.EXPECT().AuthenticateRequest(test.MatchContext(), httpReqMatcher, true).Return(projectContext, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/testdomain/auth", strings.NewReader("x-auth-token="+freshToken))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{
+		Name:     "X-Auth-Token",
+		Value:    staleCookieToken,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	resp := recorder.Result()
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusSeeOther, resp.StatusCode,
+		"stale cookie + fresh form token should still authenticate via the form token")
+}

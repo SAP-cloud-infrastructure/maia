@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"strings"
@@ -229,6 +230,24 @@ func isPlainBasicAuth(req *http.Request) bool {
 	return false
 }
 
+// isFormTokenHandoff reports whether req targets the POST /{domain}/auth
+// token-handoff endpoint with a form-encoded body. The Content-Type comparison
+// is case-insensitive per RFC 9110 §8.3.1 and tolerates parameters such as
+// "; charset=utf-8".
+func isFormTokenHandoff(req *http.Request) bool {
+	if domain, ok := mux.Vars(req)["domain"]; !ok || !validDomain.MatchString(domain) {
+		return false
+	}
+	if !strings.HasSuffix(req.URL.Path, "/auth") {
+		return false
+	}
+	mediaType, _, err := mime.ParseMediaType(req.Header.Get("Content-Type"))
+	if err != nil {
+		return false
+	}
+	return mediaType == "application/x-www-form-urlencoded"
+}
+
 func authorizeRules(keystoneDriver keystone.Driver, w http.ResponseWriter, req *http.Request, guessScope bool, rules []string) bool {
 	logg.Debug("authenticate")
 	matchedRules := []string{}
@@ -238,7 +257,12 @@ func authorizeRules(keystoneDriver keystone.Driver, w http.ResponseWriter, req *
 	// 1. check token cookies, then user-domain specified via path prefix or cookie
 	cookie, cookieErr := req.Cookie(authTokenCookieName)
 	cookieSet := false
-	if cookieErr == nil && cookie.Value != "" && req.Header.Get(authTokenHeader) == "" {
+	// Skip cookie→header promotion for POST /{domain}/auth with a form-encoded body:
+	// that endpoint exists specifically for fresh token handoff. Promoting a stale
+	// cookie here would shadow the new token in the body and authenticate with the
+	// wrong credentials.
+	skipTokenCookie := req.Method == http.MethodPost && isFormTokenHandoff(req)
+	if !skipTokenCookie && cookieErr == nil && cookie.Value != "" && req.Header.Get(authTokenHeader) == "" {
 		logg.Debug("found token cookie: %s...", cookie.String()[:1+len(cookie.String())/4])
 		req.Header.Set(authTokenHeader, cookie.Value)
 		cookieSet = true

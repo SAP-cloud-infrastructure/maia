@@ -244,9 +244,23 @@ func tokenLogin(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "Invalid domain", http.StatusBadRequest)
 		return
 	}
-	logg.Debug("Token login redirect for domain %s", domain)
+
+	// Preserve the global-region selector across the redirect so the follow-up
+	// GET re-binds to the same Keystone (regional vs. global). Precedence
+	// matches parseGlobalRequest: URL parameter > X-Global-Region header.
+	q := url.Values{}
+	if isGlobal, err := parseGlobalRequest(req); err == nil && isGlobal {
+		q.Set("global", trueValue)
+	}
+
+	target := url.URL{Path: "/" + url.PathEscape(domain) + "/graph"}
+	if len(q) > 0 {
+		target.RawQuery = q.Encode()
+	}
+
+	logg.Debug("Token login redirect for domain %s to %s", domain, target.RequestURI())
 	// Redirect to the expression browser (cookie is already set by authorize middleware)
-	http.Redirect(w, req, "/"+url.PathEscape(domain)+"/graph", http.StatusSeeOther)
+	http.Redirect(w, req, target.RequestURI(), http.StatusSeeOther)
 }
 
 // graph returns the Prometheus UI page

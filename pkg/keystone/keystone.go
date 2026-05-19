@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 
+	"mime"
 	"net/http"
 	"net/url"
 	"sync"
@@ -397,6 +398,21 @@ func (d *keystone) AuthenticateRequest(ctx context.Context, r *http.Request, gue
 	return policyContext, nil
 }
 
+// isFormURLEncoded reports whether the given Content-Type header value
+// represents application/x-www-form-urlencoded media. Comparison is
+// case-insensitive per RFC 9110 §8.3.1, and any media-type parameters
+// (e.g. "; charset=utf-8") are tolerated.
+func isFormURLEncoded(contentType string) bool {
+	if contentType == "" {
+		return false
+	}
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+	return mediaType == "application/x-www-form-urlencoded"
+}
+
 // authOptionsFromRequest retrieves authOptionsFromRequest from http request and puts them into an AuthOptions structure
 // It requires username to contain a qualified OpenStack username and project/domain scope information
 // Format: <user>"|"<project> or <user>"|@"<domain>
@@ -427,8 +443,7 @@ func (d *keystone) authOptionsFromRequest(ctx context.Context, r *http.Request, 
 		// relocate to header
 		query.Del("x-auth-token")
 		r.Header.Set("X-Auth-Token", ba.TokenID)
-	} else if r.Method == http.MethodPost && r.Body != nil &&
-		strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
+	} else if r.Method == http.MethodPost && r.Body != nil && isFormURLEncoded(r.Header.Get("Content-Type")) {
 		// Secure alternative: token submitted via POST body (avoids URL exposure).
 		// Limit body size to prevent memory exhaustion — a Keystone token is ~200 bytes.
 		r.Body = http.MaxBytesReader(nil, r.Body, 16*1024)
