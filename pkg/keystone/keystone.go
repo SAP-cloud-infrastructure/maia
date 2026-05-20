@@ -432,7 +432,11 @@ func (d *keystone) authOptionsFromRequest(ctx context.Context, r *http.Request, 
 	appCredUserName := r.Header.Get("X-User-Name")
 
 	// extract credentials
+	// query is a copy of r.URL.Query(); any Del calls below must be flushed
+	// back to r.URL.RawQuery via the queryDirty flag so downstream consumers
+	// (logging, metrics, reverse-proxy paths) observe the scrubbed URL.
 	query := r.URL.Query()
+	queryDirty := false
 	if token := r.Header.Get("X-Auth-Token"); token != "" {
 		// perfect: we have a token and thus a authorization scope
 		ba.TokenID = token
@@ -442,6 +446,7 @@ func (d *keystone) authOptionsFromRequest(ctx context.Context, r *http.Request, 
 		ba.TokenID = token
 		// relocate to header
 		query.Del("x-auth-token")
+		queryDirty = true
 		r.Header.Set("X-Auth-Token", ba.TokenID)
 	} else if r.Method == http.MethodPost && r.Body != nil && isFormURLEncoded(r.Header.Get("Content-Type")) {
 		// Secure alternative: token submitted via POST body (avoids URL exposure).
@@ -554,12 +559,22 @@ func (d *keystone) authOptionsFromRequest(ctx context.Context, r *http.Request, 
 	if projectID := query.Get("project_id"); projectID != "" {
 		ba.Scope = &gophercloud.AuthScope{ProjectID: projectID}
 		query.Del("project_id")
+		queryDirty = true
 	} else if domainID := query.Get("domain_id"); domainID != "" {
 		ba.Scope = &gophercloud.AuthScope{DomainID: domainID}
 		query.Del("domain_id")
+		queryDirty = true
 	} else if ba.TokenID == "" && ba.Scope == nil {
 		// fail if we end up with no scope
 		return nil, NewAuthenticationError(StatusMissingCredentials, "Basic authorization credentials missing OpenStack authorization scope part")
+	}
+
+	// Flush deletions back to r.URL.RawQuery so downstream consumers see the
+	// scrubbed URL. Skip when no Del fired to preserve original key ordering
+	// (url.Values.Encode sorts keys, which would needlessly reorder unrelated
+	// params on untouched URLs).
+	if queryDirty {
+		r.URL.RawQuery = query.Encode()
 	}
 
 	return &ba, nil

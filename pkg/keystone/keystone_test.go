@@ -789,6 +789,63 @@ func TestAuthOptionsFromRequest_PostFormBodyTooLarge(t *testing.T) {
 	assert.Equal(t, "", req.Header.Get("X-Auth-Token"), "X-Auth-Token must not be set from oversize body")
 }
 
+// TestAuthOptionsFromRequest_ScrubsRawQuery verifies that any query
+// parameters consumed by authOptionsFromRequest (x-auth-token, project_id,
+// domain_id) are flushed back into r.URL.RawQuery so downstream consumers
+// — logging, metrics, reverse-proxy paths — observe the same scrubbed URL
+// the function operated on. Without this flush, r.URL.Query() returns a
+// copy and Del calls never reach r.URL.RawQuery.
+func TestAuthOptionsFromRequest_ScrubsRawQuery(t *testing.T) {
+	defer gock.Off()
+	driver := setupTest()
+	ks, ok := driver.(*keystone)
+	assert.True(t, ok, "expected *keystone driver")
+
+	t.Run("x-auth-token query param scrubbed, unrelated params preserved", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "http://maia.local/testdomain/graph?x-auth-token=secret-token-XXXXXXX&foo=bar", http.NoBody)
+
+		_, err := ks.authOptionsFromRequest(t.Context(), req, false)
+		assert.Nil(t, err, "authOptionsFromRequest must not error")
+		assert.NotContains(t, req.URL.RawQuery, "x-auth-token", "x-auth-token must be scrubbed from RawQuery")
+		assert.NotContains(t, req.URL.RawQuery, "secret-token", "token value must not survive in RawQuery")
+		assert.Contains(t, req.URL.RawQuery, "foo=bar", "unrelated query params must be preserved")
+	})
+
+	t.Run("project_id query param scrubbed, unrelated params preserved", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "http://maia.local/testdomain/graph?project_id=p00001&foo=bar", http.NoBody)
+		req.SetBasicAuth("testuser@testdomain", "testpw")
+
+		_, err := ks.authOptionsFromRequest(t.Context(), req, false)
+		assert.Nil(t, err, "authOptionsFromRequest must not error")
+		assert.NotContains(t, req.URL.RawQuery, "project_id", "project_id must be scrubbed from RawQuery")
+		assert.Contains(t, req.URL.RawQuery, "foo=bar", "unrelated query params must be preserved")
+	})
+
+	t.Run("domain_id query param scrubbed, unrelated params preserved", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "http://maia.local/testdomain/graph?domain_id=d00001&foo=bar", http.NoBody)
+		req.SetBasicAuth("testuser@testdomain", "testpw")
+
+		_, err := ks.authOptionsFromRequest(t.Context(), req, false)
+		assert.Nil(t, err, "authOptionsFromRequest must not error")
+		assert.NotContains(t, req.URL.RawQuery, "domain_id", "domain_id must be scrubbed from RawQuery")
+		assert.Contains(t, req.URL.RawQuery, "foo=bar", "unrelated query params must be preserved")
+	})
+
+	t.Run("RawQuery untouched when no scrubbed params present", func(t *testing.T) {
+		// Original key ordering matters: url.Values.Encode() sorts keys, so
+		// re-encoding an untouched query would reorder unrelated params. This
+		// test pins the no-op fast path. Keys are deliberately not in
+		// alphabetical order so a stray Encode() would reshuffle them.
+		const original = "zeta=1&alpha=2&mike=3"
+		req := httptest.NewRequest(http.MethodGet, "http://maia.local/testdomain/graph?"+original, http.NoBody)
+		req.SetBasicAuth("testuser@testdomain|testproject@testdomain", "testpw")
+
+		_, err := ks.authOptionsFromRequest(t.Context(), req, false)
+		assert.Nil(t, err, "authOptionsFromRequest must not error")
+		assert.Equal(t, original, req.URL.RawQuery, "RawQuery must be byte-identical when no scrubbed params were present")
+	})
+}
+
 // Test_isFormURLEncoded asserts the helper handles RFC 9110 §8.3.1
 // case-insensitive media types and tolerates parameters.
 func Test_isFormURLEncoded(t *testing.T) {
