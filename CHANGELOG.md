@@ -19,3 +19,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - Bump `github.com/prometheus/prometheus` to v0.311.3 (CVE-2026-42151, CVE-2026-42154, CVE-2026-44903)
+- Enforce upstream host equality on Prometheus storage requests as defense-in-depth against SSRF (CodeQL `go/request-forgery`)
