@@ -15,3 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Add sentinel label value for global metric visibility (`maia.label_value_for_global_visibility` config option, disabled by default)
+
+### Security
+
+- Bump `github.com/prometheus/prometheus` to v0.311.3 (CVE-2026-42151, CVE-2026-42154, CVE-2026-44903)

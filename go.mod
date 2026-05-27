@@ -10,7 +10,7 @@ require (
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/common v0.67.5
-	github.com/prometheus/prometheus v0.311.2-0.20260410083055-07c6232d159b
+	github.com/prometheus/prometheus v0.311.3
 	github.com/rs/cors v1.11.1
 	github.com/sapcc/go-bits v0.0.0-20260527114813-6f867d03059b
 	github.com/spf13/cobra v1.9.1
