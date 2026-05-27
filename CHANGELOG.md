@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2017 SAP SE or an SAP affiliate company
+SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
 SPDX-License-Identifier: Apache-2.0
 -->
 
@@ -22,3 +22,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Deprecated
 
 - Passing auth tokens via ?x-auth-token= URL query parameter (use POST endpoint or X-Auth-Token header)
+- Add sentinel label value for global metric visibility (`maia.label_value_for_global_visibility` config option, disabled by default)

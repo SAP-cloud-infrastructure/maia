@@ -4,16 +4,16 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"strings"
-
-	"bytes"
-	"io"
-	"path/filepath"
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -31,6 +31,11 @@ var storageInstance storage.Driver
 var keystoneInstance keystone.Driver
 var globalKeystoneInstance keystone.Driver
 
+// sentinelValue is the configured global visibility sentinel, resolved once at
+// startup. When non-empty, it is appended to project_id/domain_id scope
+// constraints so that metrics carrying this value are visible to all tenants.
+var sentinelValue string
+
 // Server initializes and starts the API server, hooking it up to the API router
 func Server(ctx context.Context) error {
 	prometheusAPIURL := viper.GetString("maia.prometheus_url")
@@ -47,6 +52,15 @@ func Server(ctx context.Context) error {
 		logg.Info("Initializing global Keystone connection to %s", viper.GetString("keystone.global.auth_url"))
 		globalKeystone = keystone.NewKeystoneDriverWithSection("global")
 		globalKeystoneInstance = globalKeystone
+	}
+
+	// Validate and resolve sentinel value for global metric visibility (once at startup)
+	sentinelValue = viper.GetString("maia.label_value_for_global_visibility")
+	if sentinelValue != "" {
+		if regexp.QuoteMeta(sentinelValue) != sentinelValue {
+			panic(fmt.Errorf("maia.label_value_for_global_visibility contains regex metacharacters (value: %q); it must be a plain literal because it is injected into scope regexes verbatim", sentinelValue))
+		}
+		logg.Info("Global metric visibility sentinel configured: %q (appended to project_id/domain_id scope constraints)", sentinelValue)
 	}
 
 	// The main router dispatches all incoming requests

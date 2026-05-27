@@ -3,7 +3,7 @@
 
 FROM golang:1.26.3-alpine3.23 AS builder
 
-RUN apk add --no-cache --no-progress ca-certificates gcc git make musl-dev
+RUN apk add --no-cache --no-progress ca-certificates gcc musl-dev git make
 
 COPY . /src
 ARG BININFO_BUILD_DATE BININFO_COMMIT_HASH BININFO_VERSION # provided to 'make install'
@@ -39,7 +39,7 @@ RUN make -C /src static-check
 RUN chown -R 4200:4200 /src/ /go/
 USER 4200:4200
 RUN cd /src \
-  && git config --global --add safe.directory /src \
+  && { if test -d .git; then git config --global --add safe.directory /src; fi; } \
   && make build/cover.out
 
 ################################################################################
