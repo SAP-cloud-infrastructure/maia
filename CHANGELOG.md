@@ -15,18 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - POST /{domain}/auth endpoint for token handoff via request body
-
-### Changed
-
-- POST /{domain}/auth now accepts Content-Type values per RFC 9110 §8.3.1, so
-  case variants such as `Application/X-WWW-Form-Urlencoded; charset=utf-8` are
-  recognised as form-encoded.
-- POST /{domain}/auth redirects now preserve `?global=true` (and the
-  `X-Global-Region` header equivalent) so the dashboard load binds to the same
-  Keystone backend that authenticated the handoff.
-- POST /{domain}/auth no longer promotes a pre-existing X-Auth-Token cookie
-  into the request header before the form body is parsed, so a fresh token in
-  the body takes precedence over a stale session cookie.
+- Case-insensitive Content-Type matching for the POST /{domain}/auth endpoint
+- POST /{domain}/auth preserves the `global` flag through redirects
+- POST /{domain}/auth honors a fresh body token over a stale session cookie
 
 ### Deprecated
 

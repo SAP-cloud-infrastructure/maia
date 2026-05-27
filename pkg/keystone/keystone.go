@@ -435,18 +435,38 @@ func (d *keystone) authOptionsFromRequest(ctx context.Context, r *http.Request, 
 	// query is a copy of r.URL.Query(); any Del calls below must be flushed
 	// back to r.URL.RawQuery via the queryDirty flag so downstream consumers
 	// (logging, metrics, reverse-proxy paths) observe the scrubbed URL.
+	// The flush runs in a defer so every early-return path (app-cred header,
+	// basic-auth *appcred, guessScope failure, missing-credentials, missing-
+	// scope) propagates the scrubbed RawQuery — not just the fall-through.
 	query := r.URL.Query()
 	queryDirty := false
+	defer func() {
+		if queryDirty {
+			r.URL.RawQuery = query.Encode()
+		}
+	}()
+
+	// Always scrub the deprecated ?x-auth-token= query parameter and log the
+	// deprecation when it is present, regardless of which credential branch
+	// wins below. This prevents the token from leaking into downstream logs,
+	// metrics, or proxied URLs when a client sends both an X-Auth-Token
+	// header and the deprecated query parameter (typical migration state).
+	// The deprecated query-only flow stays fully functional: queryToken is
+	// still used as the credential when no header or POST body is present.
+	queryToken := query.Get("x-auth-token")
+	if queryToken != "" {
+		logg.Info("DEPRECATION: token passed via URL query parameter on %s; migrate to POST /{domain}/auth or X-Auth-Token header", r.URL.Path)
+		query.Del("x-auth-token")
+		queryDirty = true
+	}
+
 	if token := r.Header.Get("X-Auth-Token"); token != "" {
 		// perfect: we have a token and thus a authorization scope
 		ba.TokenID = token
-	} else if token := query.Get("x-auth-token"); token != "" {
-		// perfect: we have a token and thus a authorization scope (albeit in lower-case)
-		logg.Info("DEPRECATION: token passed via URL query parameter on %s; migrate to POST /{domain}/auth or X-Auth-Token header", r.URL.Path)
-		ba.TokenID = token
+	} else if queryToken != "" {
+		// fall back to the deprecated query parameter (already scrubbed above)
+		ba.TokenID = queryToken
 		// relocate to header
-		query.Del("x-auth-token")
-		queryDirty = true
 		r.Header.Set("X-Auth-Token", ba.TokenID)
 	} else if r.Method == http.MethodPost && r.Body != nil && isFormURLEncoded(r.Header.Get("Content-Type")) {
 		// Secure alternative: token submitted via POST body (avoids URL exposure).
@@ -569,13 +589,9 @@ func (d *keystone) authOptionsFromRequest(ctx context.Context, r *http.Request, 
 		return nil, NewAuthenticationError(StatusMissingCredentials, "Basic authorization credentials missing OpenStack authorization scope part")
 	}
 
-	// Flush deletions back to r.URL.RawQuery so downstream consumers see the
-	// scrubbed URL. Skip when no Del fired to preserve original key ordering
-	// (url.Values.Encode sorts keys, which would needlessly reorder unrelated
-	// params on untouched URLs).
-	if queryDirty {
-		r.URL.RawQuery = query.Encode()
-	}
+	// Query parameter deletions (x-auth-token, project_id, domain_id) are
+	// flushed back to r.URL.RawQuery by the defer at the top of this function,
+	// covering both fall-through and every early-return path.
 
 	return &ba, nil
 }

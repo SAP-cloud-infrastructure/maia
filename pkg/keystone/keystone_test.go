@@ -844,6 +844,37 @@ func TestAuthOptionsFromRequest_ScrubsRawQuery(t *testing.T) {
 		assert.Nil(t, err, "authOptionsFromRequest must not error")
 		assert.Equal(t, original, req.URL.RawQuery, "RawQuery must be byte-identical when no scrubbed params were present")
 	})
+
+	// CRITICAL early-return paths: when ?x-auth-token= is present alongside
+	// app-credential headers or basic-auth *appcred, authOptionsFromRequest
+	// returns early — the scrubbed query copy must still reach r.URL.RawQuery
+	// via the deferred flush, otherwise the token leaks into downstream
+	// proxy paths, federation, and access logs.
+	t.Run("x-auth-token scrubbed on app-credential header early return", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "http://maia.local/testdomain/graph?x-auth-token=secret-token-XXXXXXX&foo=bar", http.NoBody)
+		req.Header.Set("X-Application-Credential-Id", "appcred-id-1")
+		req.Header.Set("X-Application-Credential-Secret", "appcred-secret-1")
+
+		_, err := ks.authOptionsFromRequest(t.Context(), req, false)
+		assert.Nil(t, err, "authOptionsFromRequest must not error on app-cred header path")
+		assert.NotContains(t, req.URL.RawQuery, "x-auth-token", "x-auth-token must be scrubbed even on early-return app-cred path")
+		assert.NotContains(t, req.URL.RawQuery, "secret-token", "token value must not survive on early-return app-cred path")
+		assert.Contains(t, req.URL.RawQuery, "foo=bar", "unrelated query params must be preserved on early-return app-cred path")
+	})
+
+	t.Run("x-auth-token scrubbed on basic-auth *appcred early return", func(t *testing.T) {
+		// *appcred-name@user@domain : secret form triggers the basic-auth
+		// app-credential branch which returns before the (now-removed) inline
+		// flush. The defer must still propagate the scrubbed query.
+		req := httptest.NewRequest(http.MethodGet, "http://maia.local/testdomain/graph?x-auth-token=secret-token-XXXXXXX&foo=bar", http.NoBody)
+		req.SetBasicAuth("*appcred-name@testuser@testdomain", "appcred-secret-1")
+
+		_, err := ks.authOptionsFromRequest(t.Context(), req, false)
+		assert.Nil(t, err, "authOptionsFromRequest must not error on basic-auth *appcred path")
+		assert.NotContains(t, req.URL.RawQuery, "x-auth-token", "x-auth-token must be scrubbed even on early-return basic-auth *appcred path")
+		assert.NotContains(t, req.URL.RawQuery, "secret-token", "token value must not survive on early-return basic-auth *appcred path")
+		assert.Contains(t, req.URL.RawQuery, "foo=bar", "unrelated query params must be preserved on early-return basic-auth *appcred path")
+	})
 }
 
 // Test_isFormURLEncoded asserts the helper handles RFC 9110 §8.3.1
