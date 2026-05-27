@@ -28,6 +28,8 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
@@ -46,11 +48,14 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: Post coverage report
         uses: fgrosse/go-coverage-report@v1.3.0
         with:
           coverage-artifact-name: code-coverage
           coverage-file-name: cover.out
+          root-package: github.com/SAP-cloud-infrastructure/maia
     permissions:
       actions: read
       contents: read
@@ -63,6 +68,8 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
