@@ -12,6 +12,7 @@ unittest.db
 build/cover.out
 build/*.cover.out
 build/cover.html
+build/coverprofile.out
 *.actual
 
 # vendoring artifacts
