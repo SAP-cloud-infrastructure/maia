@@ -166,14 +166,22 @@ func scopeToLabelConstraint(req *http.Request, keystoneDriver keystone.Driver) (
 		logg.Debug("[SCOPE_DEBUG] ChildProjects for %s returned: %v", projectID, children)
 		allProjects := append([]string{projectID}, children...)
 		logg.Debug("[SCOPE_DEBUG] Final project list: %v", allProjects)
-		return "project_id", allProjects
+		return "project_id", appendSentinelValue(allProjects)
 	} else if domainID := req.Header.Get("X-Domain-Id"); domainID != "" {
 		logg.Debug("[SCOPE_DEBUG] Found X-Domain-Id: %s", domainID)
-		return "domain_id", []string{domainID}
+		return "domain_id", appendSentinelValue([]string{domainID})
 	}
 
 	logg.Error("[SCOPE_DEBUG] No X-Project-Id or X-Domain-Id found in headers")
 	panic(errors.New("missing OpenStack scope attributes in request header"))
+}
+
+// appendSentinelValue appends the configured global visibility sentinel to the label values list.
+func appendSentinelValue(labelValues []string) []string {
+	if sentinelValue != "" {
+		return append(labelValues, sentinelValue)
+	}
+	return labelValues
 }
 
 // buildSelectors takes the selectors contained in the "match[]" URL query parameter(s)

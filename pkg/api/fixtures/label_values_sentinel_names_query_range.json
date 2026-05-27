@@ -1,0 +1,30 @@
+{
+    "status": "success",
+    "data": {
+        "resultType": "matrix",
+        "result": [
+            {
+                "metric": {
+                    "__name__": "kube_node_info"
+                },
+                "values": [
+                    [
+                        1567641600,
+                        "3"
+                    ]
+                ]
+            },
+            {
+                "metric": {
+                    "__name__": "tenant_metric"
+                },
+                "values": [
+                    [
+                        1567641600,
+                        "10"
+                    ]
+                ]
+            }
+        ]
+    }
+}
