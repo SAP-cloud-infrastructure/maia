@@ -119,6 +119,11 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 
 	// domain-prefixed paths. Order is relevant! This implies that there must be no domain federate, static or graph :-)
 	mainRouter.Methods(http.MethodGet).Path("/{domain}/graph").HandlerFunc(authorize(observeDuration(observeResponseSize(graph, "graph"), "graph"), true, "metric:show"))
+	// POST-based token login: accepts token in request body instead of URL query parameter.
+	// This avoids exposing tokens in URLs (browser history, server logs, Referrer headers).
+	// After successful auth (handled by authorize middleware which sets the cookie),
+	// redirects to the dashboard.
+	mainRouter.Methods(http.MethodPost).Path("/{domain}/auth").HandlerFunc(authorize(observeDuration(tokenLogin, "auth"), true, "metric:show"))
 	mainRouter.Methods(http.MethodGet).Path("/{domain}").HandlerFunc(redirectToDomainRootPage)
 
 	// provide the inflight metrics for all paths
@@ -241,6 +246,35 @@ func Federate(w http.ResponseWriter, req *http.Request) {
 	}
 
 	ReturnResponse(w, response)
+}
+
+// tokenLogin handles POST /{domain}/auth for secure token handoff.
+// The authorize middleware has already validated the token and set the auth cookie.
+// This handler simply redirects to the dashboard.
+func tokenLogin(w http.ResponseWriter, req *http.Request) {
+	domain, ok := mux.Vars(req)["domain"]
+	if !ok || !validDomain.MatchString(domain) {
+		logg.Debug("Invalid domain in token login: %s", domain)
+		http.Error(w, "Invalid domain", http.StatusBadRequest)
+		return
+	}
+
+	// Preserve the global-region selector across the redirect so the follow-up
+	// GET re-binds to the same Keystone (regional vs. global). Precedence
+	// matches parseGlobalRequest: URL parameter > X-Global-Region header.
+	q := url.Values{}
+	if isGlobal, err := parseGlobalRequest(req); err == nil && isGlobal {
+		q.Set("global", trueValue)
+	}
+
+	target := url.URL{Path: "/" + url.PathEscape(domain) + "/graph"}
+	if len(q) > 0 {
+		target.RawQuery = q.Encode()
+	}
+
+	logg.Debug("Token login redirect for domain %s to %s", domain, target.RequestURI())
+	// Redirect to the expression browser (cookie is already set by authorize middleware)
+	http.Redirect(w, req, target.RequestURI(), http.StatusSeeOther)
 }
 
 // graph returns the Prometheus UI page

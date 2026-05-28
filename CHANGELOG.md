@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- POST /{domain}/auth endpoint for token handoff via request body
+- Case-insensitive Content-Type matching for the POST /{domain}/auth endpoint
+- POST /{domain}/auth preserves the `global` flag through redirects
+- POST /{domain}/auth honors a fresh body token over a stale session cookie
+
+### Deprecated
+
+- Passing auth tokens via ?x-auth-token= URL query parameter (use POST endpoint or X-Auth-Token header)
 - Add sentinel label value for global metric visibility (`maia.label_value_for_global_visibility` config option, disabled by default)
 
 ### Security
