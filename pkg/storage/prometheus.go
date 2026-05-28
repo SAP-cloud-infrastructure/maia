@@ -5,12 +5,11 @@ package storage
 
 import (
 	"context"
-	"net/http"
-
-	"net/url"
-
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
+	"slices"
 
 	"github.com/spf13/viper"
 
@@ -152,9 +151,13 @@ func (promCli *prometheusStorageClient) mapURL(maiaURL *url.URL) url.URL {
 
 // SendToPrometheus takes care of the request wrapping and delivery to Prometheus
 func (promCli *prometheusStorageClient) sendToPrometheus(method, promURL string, body io.Reader, headers map[string]string) (*http.Response, error) {
-	// Validate the URL before proceeding with the request.
-	if !isValidURL(promURL) {
-		return nil, fmt.Errorf("invalid URL: %s", promURL)
+	// Validate the URL before proceeding with the request. This is defense-in-depth
+	// against CodeQL go/request-forgery: mapURL() already overwrites Scheme/Host/User
+	// to the trusted upstream, but a future change to mapURL() could regress that
+	// invariant. Rejecting any host other than the configured upstream ensures the
+	// request never leaves the process for a foreign destination.
+	if err := promCli.validateUpstreamURL(promURL); err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequestWithContext(context.Background(), method, promURL, body)
@@ -180,22 +183,35 @@ func (promCli *prometheusStorageClient) sendToPrometheus(method, promURL string,
 	return resp, nil
 }
 
-// isValidURL checks if the provided URL is well-formed and adheres to basic validation rules.
-func isValidURL(urlStr string) bool {
+// validateUpstreamURL checks that the request URL is well-formed AND points at a
+// trusted upstream host (the configured Prometheus URL or, for federation, the
+// configured federate URL). This makes the SSRF safety property explicit so it is
+// provable to a static analyzer and to future maintainers.
+func (promCli *prometheusStorageClient) validateUpstreamURL(urlStr string) error {
 	parsedURL, err := url.Parse(urlStr)
 	if err != nil {
-		return false
+		return fmt.Errorf("invalid URL %q: %w", urlStr, err)
 	}
 
 	// Check if the scheme is http or https.
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return false
+		return fmt.Errorf("invalid URL %q: scheme %q is not http or https", urlStr, parsedURL.Scheme)
 	}
 
 	// Check if the host is non-empty.
 	if parsedURL.Host == "" {
-		return false
+		return fmt.Errorf("invalid URL %q: empty host", urlStr)
 	}
 
-	return true
+	// Enforce that the host matches a trusted upstream. promCli.url is always set;
+	// promCli.federateURL is set in init() (it falls back to promCli.url when no
+	// dedicated federate URL is configured).
+	allowedHosts := []string{promCli.url.Host}
+	if promCli.federateURL != nil && promCli.federateURL.Host != promCli.url.Host {
+		allowedHosts = append(allowedHosts, promCli.federateURL.Host)
+	}
+	if slices.Contains(allowedHosts, parsedURL.Host) {
+		return nil
+	}
+	return fmt.Errorf("refusing request to untrusted host %q (expected one of %v)", parsedURL.Host, allowedHosts)
 }

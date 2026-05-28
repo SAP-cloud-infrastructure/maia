@@ -108,3 +108,57 @@ func TestLabels(t *testing.T) {
 
 	assertDone(t)
 }
+
+// TestValidateUpstreamURL exercises the SSRF defense-in-depth check that backs
+// CodeQL go/request-forgery. mapURL() rewrites Host/Scheme/User to the trusted
+// upstream, so the validator should accept the configured Prometheus host and
+// the federate host but reject anything else.
+func TestValidateUpstreamURL(t *testing.T) {
+	setupTest(t)
+	driver := NewPrometheusDriver(prometheusURL, map[string]string{}).(*prometheusStorageClient)
+
+	cases := []struct {
+		name    string
+		url     string
+		wantErr string // substring match; empty = expect success
+	}{
+		{"trusted upstream", "http://thanos.local/thanos/api/v1/query", ""},
+		{"trusted federate", "http://prometheus.local/federate", ""},
+		{"foreign host rejected", "http://evil.example.com/api/v1/query", "untrusted host"},
+		{"localhost rejected", "http://127.0.0.1:9090/api/v1/query", "untrusted host"},
+		{"empty host rejected", "http:///api/v1/query", "empty host"},
+		{"unknown scheme rejected", "file:///etc/passwd", "scheme"},
+		{"ftp scheme rejected", "ftp://thanos.local/", "scheme"},
+		{"malformed url rejected", "http://%zz", "invalid URL"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := driver.validateUpstreamURL(tc.url)
+			if tc.wantErr == "" {
+				assert.NoError(t, err, "expected %q to be accepted", tc.url)
+				return
+			}
+			assert.Error(t, err, "expected %q to be rejected", tc.url)
+			if err != nil {
+				assert.Contains(t, err.Error(), tc.wantErr, "wrong rejection reason for %q", tc.url)
+			}
+		})
+	}
+}
+
+// TestSendToPrometheusRejectsUntrustedHost ensures the validation actually
+// blocks an outbound request, not just returns an error from a helper.
+func TestSendToPrometheusRejectsUntrustedHost(t *testing.T) {
+	defer gock.Off()
+	setupTest(t)
+	driver := NewPrometheusDriver(prometheusURL, map[string]string{}).(*prometheusStorageClient)
+
+	// No gock mock registered — if validation fails to block, the request would
+	// hit the real network (or gock's "unmatched" path) and we'd see a different
+	// error. Validation must short-circuit before any HTTP call.
+	resp, err := driver.sendToPrometheus("GET", "http://attacker.invalid/api/v1/query", nil, nil)
+	assert.Nil(t, resp)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "untrusted host")
+}
