@@ -135,9 +135,9 @@ func (promCli *prometheusStorageClient) buildURL(path string, params map[string]
 //nolint:unparam // method is currently always "GET" but kept generic for API flexibility
 func (promCli *prometheusStorageClient) sendToPrometheus(method, promURL string, body io.Reader, headers map[string]string) (*http.Response, error) {
 	// Defense-in-depth: verify the URL targets a trusted upstream before sending.
-	// All callers construct URLs via buildURL() which uses only the configured
-	// promCli.url / promCli.federateURL base, but this check makes the safety
-	// property explicit and guards against future regressions.
+	// All Driver methods construct URLs via buildURL() which uses only the
+	// configured promCli.url / promCli.federateURL base, but this check makes
+	// the safety property explicit and guards against future regressions.
 	if err := promCli.validateUpstreamURL(promURL); err != nil {
 		return nil, err
 	}
