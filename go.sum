@@ -126,8 +126,8 @@ github.com/prometheus/client_golang/exp v0.0.0-20260325093428-d8591d0db856 h1:1Y
 github.com/prometheus/client_golang/exp v0.0.0-20260325093428-d8591d0db856/go.mod h1:Vf0QcmVhGqpjLxZOaWrFSep86vchQtJmbztFaMM4f6Q=
 github.com/prometheus/client_model v0.6.2 h1:oBsgwpGs7iVziMvrGhE53c/GrLUsZdHnqNwqPLxwZyk=
 github.com/prometheus/client_model v0.6.2/go.mod h1:y3m2F6Gdpfy6Ut/GBsUqTWZqCUvMVzSfMLjcu6wAwpE=
-github.com/prometheus/common v0.67.5 h1:pIgK94WWlQt1WLwAC5j2ynLaBRDiinoAb86HZHTUGI4=
-github.com/prometheus/common v0.67.5/go.mod h1:SjE/0MzDEEAyrdr5Gqc6G+sXI67maCxzaT3A2+HqjUw=
+github.com/prometheus/common v0.68.1 h1:omjRRl4QP4komogpXuhfeOiisQg7xdy8VM1UY+pStaY=
+github.com/prometheus/common v0.68.1/go.mod h1:ZzL3f6u94qUxh9p+tJTrF+FvBS1XXbbRAZCQkytAL0Y=
 github.com/prometheus/otlptranslator v1.0.0 h1:s0LJW/iN9dkIH+EnhiD3BlkkP5QVIUVEoIwkU+A6qos=
 github.com/prometheus/otlptranslator v1.0.0/go.mod h1:vRYWnXvI6aWGpsdY/mOT/cbeVRBlPWtBNDb7kGR3uKM=
 github.com/prometheus/procfs v0.17.0 h1:FuLQ+05u4ZI+SS/w9+BWEM2TXiHKsUQ9TADiRH7DuK0=
@@ -143,8 +143,8 @@ github.com/rs/cors v1.11.1/go.mod h1:XyqrcTp5zjWr1wsJ8PIRZssZ8b/WMcMf71DJnit4EMU
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/sagikazarmark/locafero v0.7.0 h1:5MqpDsTGNDhY8sGp0Aowyf0qKsPrhewaLSsFaodPcyo=
 github.com/sagikazarmark/locafero v0.7.0/go.mod h1:2za3Cg5rMaTMoG/2Ulr9AwtFaIppKXTRYnozin4aB5k=
-github.com/sapcc/go-bits v0.0.0-20260529151418-8d2b33444f03 h1:ni4+0WYad/128i2s3lrE2wOwzu1BkhZpWq9ZgTDsjCk=
-github.com/sapcc/go-bits v0.0.0-20260529151418-8d2b33444f03/go.mod h1:tlX0d8TvLgEikNWwFbB1SxnW0q/6XybpXjt8mr97Qzg=
+github.com/sapcc/go-bits v0.0.0-20260604095421-6bd206943957 h1:tK1d+oXV8NFh3H7i/6eiJ3umBhartFOwvwvsEYBt+tA=
+github.com/sapcc/go-bits v0.0.0-20260604095421-6bd206943957/go.mod h1:qYAoxEZGN777UFSBw7L6DtC2uUZHmkCcaWslToEnWD8=
 github.com/sourcegraph/conc v0.3.0 h1:OQTbbt6P72L20UqAkXXuLOj79LfEanQ+YQFNpLA9ySo=
 github.com/sourcegraph/conc v0.3.0/go.mod h1:Sdozi7LEKbFPqYX2/J+iBAM6HpqSLTASQIKqDmF7Mt0=
 github.com/spf13/afero v1.12.0 h1:UcOPyRBYczmFn6yvphxkn9ZEOY65cpwGKb5mL36mrqs=
