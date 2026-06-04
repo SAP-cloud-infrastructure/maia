@@ -103,12 +103,6 @@ func (promCli *prometheusStorageClient) Federate(selectors []string, acceptConte
 	return promCli.sendToPrometheus("GET", promURL.String(), nil, map[string]string{"Accept": acceptContentType})
 }
 
-func (promCli *prometheusStorageClient) DelegateRequest(request *http.Request) (*http.Response, error) {
-	promURL := promCli.mapURL(request.URL)
-
-	return promCli.sendToPrometheus(request.Method, promURL.String(), request.Body, map[string]string{"Accept": request.Header.Get("Accept")})
-}
-
 // buildURL is used to build the target URL of a Prometheus call
 func (promCli *prometheusStorageClient) buildURL(path string, params map[string]any) url.URL {
 	promURL := *promCli.url
@@ -136,26 +130,14 @@ func (promCli *prometheusStorageClient) buildURL(path string, params map[string]
 	return promURL
 }
 
-// mapURL is used to map a Maia URL to Prometheus URL
-func (promCli *prometheusStorageClient) mapURL(maiaURL *url.URL) url.URL {
-	promURL := *maiaURL
-
-	// change original request to point to our backing Prometheus
-	promURL.Host = promCli.url.Host
-	promURL.Scheme = promCli.url.Scheme
-	promURL.User = promCli.url.User
-	promURL.RawQuery = ""
-
-	return promURL
-}
-
-// SendToPrometheus takes care of the request wrapping and delivery to Prometheus
+// sendToPrometheus takes care of the request wrapping and delivery to Prometheus.
+//
+//nolint:unparam // method is currently always "GET" but kept generic for API flexibility
 func (promCli *prometheusStorageClient) sendToPrometheus(method, promURL string, body io.Reader, headers map[string]string) (*http.Response, error) {
-	// Validate the URL before proceeding with the request. This is defense-in-depth
-	// against CodeQL go/request-forgery: mapURL() already overwrites Scheme/Host/User
-	// to the trusted upstream, but a future change to mapURL() could regress that
-	// invariant. Rejecting any host other than the configured upstream ensures the
-	// request never leaves the process for a foreign destination.
+	// Defense-in-depth: verify the URL targets a trusted upstream before sending.
+	// All callers construct URLs via buildURL() which uses only the configured
+	// promCli.url / promCli.federateURL base, but this check makes the safety
+	// property explicit and guards against future regressions.
 	if err := promCli.validateUpstreamURL(promURL); err != nil {
 		return nil, err
 	}
