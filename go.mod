@@ -12,7 +12,7 @@ require (
 	github.com/prometheus/common v0.68.1
 	github.com/prometheus/prometheus v0.311.3
 	github.com/rs/cors v1.11.1
-	github.com/sapcc/go-bits v0.0.0-20260605140732-260f8544709d
+	github.com/sapcc/go-bits v0.0.0-20260611141223-328f49772fed
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.11.1
@@ -42,8 +42,8 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/sys v0.45.0 // indirect
-	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
