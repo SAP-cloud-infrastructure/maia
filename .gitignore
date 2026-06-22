@@ -11,6 +11,7 @@ pkg/test/migrations/*.sql
 unittest.db
 build/cover.out
 build/*.cover.out
+build/coverprofile.out
 build/cover.html
 build/coverprofile.out
 *.actual

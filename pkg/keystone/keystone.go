@@ -5,8 +5,10 @@ package keystone
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"mime"
 	"net/http"
 	"net/url"
 	"sync"
@@ -396,6 +398,21 @@ func (d *keystone) AuthenticateRequest(ctx context.Context, r *http.Request, gue
 	return policyContext, nil
 }
 
+// isFormURLEncoded reports whether the given Content-Type header value
+// represents application/x-www-form-urlencoded media. Comparison is
+// case-insensitive per RFC 9110 §8.3.1, and any media-type parameters
+// (e.g. "; charset=utf-8") are tolerated.
+func isFormURLEncoded(contentType string) bool {
+	if contentType == "" {
+		return false
+	}
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+	return mediaType == "application/x-www-form-urlencoded"
+}
+
 // authOptionsFromRequest retrieves authOptionsFromRequest from http request and puts them into an AuthOptions structure
 // It requires username to contain a qualified OpenStack username and project/domain scope information
 // Format: <user>"|"<project> or <user>"|@"<domain>
@@ -415,16 +432,64 @@ func (d *keystone) authOptionsFromRequest(ctx context.Context, r *http.Request, 
 	appCredUserName := r.Header.Get("X-User-Name")
 
 	// extract credentials
+	// query is a copy of r.URL.Query(); any Del calls below must be flushed
+	// back to r.URL.RawQuery via the queryDirty flag so downstream consumers
+	// (logging, metrics, reverse-proxy paths) observe the scrubbed URL.
+	// The flush runs in a defer so every early-return path (app-cred header,
+	// basic-auth *appcred, guessScope failure, missing-credentials, missing-
+	// scope) propagates the scrubbed RawQuery — not just the fall-through.
 	query := r.URL.Query()
+	queryDirty := false
+	defer func() {
+		if queryDirty {
+			r.URL.RawQuery = query.Encode()
+		}
+	}()
+
+	// Always scrub the deprecated ?x-auth-token= query parameter and log the
+	// deprecation when it is present, regardless of which credential branch
+	// wins below. This prevents the token from leaking into downstream logs,
+	// metrics, or proxied URLs when a client sends both an X-Auth-Token
+	// header and the deprecated query parameter (typical migration state).
+	// The deprecated query-only flow stays fully functional: queryToken is
+	// still used as the credential when no header or POST body is present.
+	queryToken := query.Get("x-auth-token")
+	if queryToken != "" {
+		logg.Info("DEPRECATION: token passed via URL query parameter on %s; migrate to POST /{domain}/auth or X-Auth-Token header", r.URL.Path)
+		query.Del("x-auth-token")
+		queryDirty = true
+	}
+
 	if token := r.Header.Get("X-Auth-Token"); token != "" {
 		// perfect: we have a token and thus a authorization scope
 		ba.TokenID = token
-	} else if token := query.Get("x-auth-token"); token != "" {
-		// perfect: we have a token and thus a authorization scope (albeit in lower-case)
-		ba.TokenID = token
+	} else if queryToken != "" {
+		// fall back to the deprecated query parameter (already scrubbed above)
+		ba.TokenID = queryToken
 		// relocate to header
-		query.Del("x-auth-token")
 		r.Header.Set("X-Auth-Token", ba.TokenID)
+	} else if r.Method == http.MethodPost && r.Body != nil && isFormURLEncoded(r.Header.Get("Content-Type")) {
+		// Secure alternative: token submitted via POST body (avoids URL exposure).
+		// Limit body size to prevent memory exhaustion — a Keystone token is ~200 bytes.
+		r.Body = http.MaxBytesReader(nil, r.Body, 16*1024)
+		if err := r.ParseForm(); err != nil {
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
+				logg.Error("POST body exceeds size limit on %s", r.URL.Path)
+			} else {
+				logg.Info("POST body parse failed for %s: %v", r.URL.Path, err)
+			}
+			// Fall through — will hit "missing credentials" path below
+		} else if token := r.PostForm.Get("x-auth-token"); token != "" {
+			ba.TokenID = token
+			r.Header.Set("X-Auth-Token", ba.TokenID)
+		} else {
+			logg.Debug("POST body present but no x-auth-token field for %s", r.URL.Path)
+		}
+	}
+
+	if ba.TokenID != "" {
+		// Token was found (via header, URL query, or POST body) — skip other auth methods
 	} else if (appCredID != "" && appCredSecret != "") || (appCredName != "" && appCredUserName != "") {
 		ba.ApplicationCredentialID = appCredID
 		ba.ApplicationCredentialName = appCredName
@@ -514,13 +579,19 @@ func (d *keystone) authOptionsFromRequest(ctx context.Context, r *http.Request, 
 	if projectID := query.Get("project_id"); projectID != "" {
 		ba.Scope = &gophercloud.AuthScope{ProjectID: projectID}
 		query.Del("project_id")
+		queryDirty = true
 	} else if domainID := query.Get("domain_id"); domainID != "" {
 		ba.Scope = &gophercloud.AuthScope{DomainID: domainID}
 		query.Del("domain_id")
+		queryDirty = true
 	} else if ba.TokenID == "" && ba.Scope == nil {
 		// fail if we end up with no scope
 		return nil, NewAuthenticationError(StatusMissingCredentials, "Basic authorization credentials missing OpenStack authorization scope part")
 	}
+
+	// Query parameter deletions (x-auth-token, project_id, domain_id) are
+	// flushed back to r.URL.RawQuery by the defer at the top of this function,
+	// covering both fall-through and every early-return path.
 
 	return &ba, nil
 }
