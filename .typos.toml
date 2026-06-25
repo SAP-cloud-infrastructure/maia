@@ -8,6 +8,7 @@ ba = "ba"
 tabl = "tabl"
 valu = "valu"
 
+
 [files]
 extend-exclude = [
   "go.mod",
