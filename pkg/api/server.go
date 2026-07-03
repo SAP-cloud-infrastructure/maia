@@ -20,6 +20,7 @@ import (
 	"github.com/rs/cors"
 	"github.com/spf13/viper"
 
+	"github.com/sapcc/go-bits/httpext"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/SAP-cloud-infrastructure/maia/pkg/keystone"
@@ -75,8 +76,8 @@ func Server(ctx context.Context) error {
 	})
 	handler := c.Handler(mainRouter)
 
-	// start HTTP server and block
-	return http.ListenAndServe(bindAddress, handler) //nolint:gosec // TODO: use httpext.ListenAndServeContext() from go-bits
+	// start HTTP server and block; shuts down gracefully when ctx is cancelled
+	return httpext.ListenAndServeContext(ctx, bindAddress, handler)
 }
 
 // setupRouter initializes the main http router
