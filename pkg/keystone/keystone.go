@@ -424,6 +424,7 @@ func (d *keystone) authOptionsFromRequest(ctx context.Context, r *http.Request, 
 		ba.TokenID = token
 		// relocate to header
 		query.Del("x-auth-token")
+		r.URL.RawQuery = query.Encode()
 		r.Header.Set("X-Auth-Token", ba.TokenID)
 	} else if (appCredID != "" && appCredSecret != "") || (appCredName != "" && appCredUserName != "") {
 		ba.ApplicationCredentialID = appCredID

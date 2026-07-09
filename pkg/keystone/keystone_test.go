@@ -218,6 +218,45 @@ func TestAuthenticateRequest_token(t *testing.T) {
 	assertDone(t)
 }
 
+func TestAuthenticateRequest_tokenInQueryRemovedFromURL(t *testing.T) {
+	defer gock.Off()
+
+	tests := []struct {
+		name     string
+		rawQuery string
+		wantURL  string
+	}{
+		{
+			name:     "only x-auth-token",
+			rawQuery: "x-auth-token=" + userToken,
+			wantURL:  "",
+		},
+		{
+			name:     "x-auth-token with other params",
+			rawQuery: "match%5B%5D=up&x-auth-token=" + userToken + "&global=true",
+			wantURL:  "global=true&match%5B%5D=up",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ks := setupTest()
+			ctx := t.Context()
+
+			gock.New(baseURL).Get("/v3/auth/tokens").Reply(http.StatusOK).File("fixtures/user_token_validate.json").AddHeader("X-Subject-Token", userToken).AddHeader("Content-Type", "application/json")
+
+			req := httptest.NewRequest(http.MethodGet, "http://maia.local/federate?"+tc.rawQuery, http.NoBody)
+			_, err := ks.AuthenticateRequest(ctx, req, false)
+
+			assert.Nil(t, err, "AuthenticateRequest should not fail")
+			assert.Equal(t, tc.wantURL, req.URL.RawQuery, "x-auth-token should be removed from r.URL.RawQuery")
+			assert.Equal(t, userToken, req.Header.Get("X-Auth-Token"), "token should be relocated to header")
+
+			assertDone(t)
+		})
+	}
+}
+
 func TestAuthenticateRequest_failed(t *testing.T) {
 	defer gock.Off()
 
