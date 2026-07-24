@@ -29,6 +29,11 @@ SPDX-License-Identifier: Apache-2.0
 </head>
 
 <body>
+{{ if .newUIEnabled }}
+<div class="alert alert-info text-center" style="margin-bottom:0; border-radius:0; padding:6px">
+  A new Maia UI is available. <a href="/ui/query"><strong>Try it →</strong></a>
+</div>
+{{ end }}
 <nav class="navbar navbar-inverse navbar-fixed-top">
     <div class="container-fluid">
         <div class="navbar-header">

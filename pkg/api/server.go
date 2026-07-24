@@ -26,6 +26,7 @@ import (
 	"github.com/SAP-cloud-infrastructure/maia/pkg/keystone"
 	"github.com/SAP-cloud-infrastructure/maia/pkg/storage"
 	"github.com/SAP-cloud-infrastructure/maia/pkg/ui"
+	newui "github.com/SAP-cloud-infrastructure/maia/web/ui"
 )
 
 var storageInstance storage.Driver
@@ -121,6 +122,20 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 	// domain-prefixed paths. Order is relevant! This implies that there must be no domain federate, static or graph :-)
 	mainRouter.Methods(http.MethodGet).Path("/{domain}/graph").HandlerFunc(authorize(observeDuration(observeResponseSize(graph, "graph"), "graph"), true, "metric:show"))
 	mainRouter.Methods(http.MethodGet).Path("/{domain}").HandlerFunc(redirectToDomainRootPage)
+
+	// P2-2/P2-3: new React UI routes, gated by maia.new_ui_enabled
+	if viper.GetBool("maia.new_ui_enabled") {
+		mainRouter.Methods(http.MethodGet).Path("/ui").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/ui/query", http.StatusFound)
+		})
+		mainRouter.Methods(http.MethodGet).PathPrefix("/ui/assets/").Handler(
+			http.StripPrefix("/ui/", http.FileServer(newui.Assets)))
+		mainRouter.Methods(http.MethodGet).Path("/ui/favicon.svg").Handler(
+			http.StripPrefix("/ui/", http.FileServer(newui.Assets)))
+		mainRouter.Methods(http.MethodGet).Path("/ui/manifest.json").Handler(
+			http.StripPrefix("/ui/", http.FileServer(newui.Assets)))
+		mainRouter.Methods(http.MethodGet).PathPrefix("/ui/").HandlerFunc(serveReactApp)
+	}
 
 	// provide the inflight metrics for all paths
 	return gaugeInflight(mainRouter)
@@ -244,6 +259,34 @@ func Federate(w http.ResponseWriter, req *http.Request) {
 	ReturnResponse(w, response)
 }
 
+// serveReactApp serves the Maia React UI SPA for all /ui/* paths.
+// It reads index.html from the embedded assets and replaces Prometheus
+// placeholders with Maia-appropriate values before writing the response.
+func serveReactApp(w http.ResponseWriter, req *http.Request) {
+	f, err := newui.Assets.Open("mantine-ui/index.html")
+	if err != nil {
+		http.Error(w, "UI not available", http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+
+	html, err := io.ReadAll(f)
+	if err != nil {
+		http.Error(w, "failed to read UI", http.StatusInternalServerError)
+		return
+	}
+
+	html = bytes.ReplaceAll(html, []byte("TITLE_PLACEHOLDER"), []byte("Maia"))
+	html = bytes.ReplaceAll(html, []byte("AGENT_MODE_PLACEHOLDER"), []byte("false"))
+	html = bytes.ReplaceAll(html, []byte("READY_PLACEHOLDER"), []byte("true"))
+	html = bytes.ReplaceAll(html, []byte("CONSOLES_LINK_PLACEHOLDER"), []byte(""))
+	html = bytes.ReplaceAll(html, []byte("LOOKBACKDELTA_PLACEHOLDER"), []byte(""))
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(html)
+}
+
 // graph returns the Prometheus UI page
 func graph(w http.ResponseWriter, req *http.Request) {
 	// Get keystone from context (secure, race-condition-free approach)
@@ -254,5 +297,9 @@ func graph(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "Internal server error: keystone context not available", http.StatusInternalServerError)
 		return
 	}
-	ui.ExecuteTemplate(w, req, "graph.html", ks, nil)
+	// P2-4: pass new UI flag so the template can show the "Try it →" banner
+	data := map[string]any{
+		"newUIEnabled": viper.GetBool("maia.new_ui_enabled"),
+	}
+	ui.ExecuteTemplate(w, req, "graph.html", ks, data)
 }
