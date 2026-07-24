@@ -51,8 +51,9 @@ export const MaiaProjectProvider: FC<PropsWithChildren> = ({ children }) => {
 
   useEffect(() => {
     Promise.all([
-      maiaFetch("api/v1/whoami").then((r) => r.json()),
-      maiaFetch("api/v1/projects").then((r) => r.json()),
+      // MAIA: absolute paths — app is served at /ui/, relative URLs would resolve to /ui/api/v1/...
+      maiaFetch("/api/v1/whoami").then((r) => r.json()),
+      maiaFetch("/api/v1/projects").then((r) => r.json()),
     ]).then(([whoami, projectList]: [MaiaUser, MaiaProject[]]) => {
       setUser(whoami);
       setProjects(projectList);

@@ -14,11 +14,19 @@ import (
 //go:embed static
 var EmbedFS embed.FS
 
-// Assets exposes the embedded static files as an http.FileSystem.
-// The "static" prefix is stripped so that /mantine-ui/index.html is
-// accessible at /mantine-ui/index.html (not /static/mantine-ui/index.html).
+// Assets exposes all embedded static files (rooted at static/).
 var Assets http.FileSystem = func() http.FileSystem {
 	sub, err := fs.Sub(EmbedFS, "static")
+	if err != nil {
+		panic(err)
+	}
+	return http.FS(sub)
+}()
+
+// MantineUIAssets exposes the mantine-ui subdirectory directly,
+// so /assets/foo.js maps to static/mantine-ui/assets/foo.js.
+var MantineUIAssets http.FileSystem = func() http.FileSystem {
+	sub, err := fs.Sub(EmbedFS, "static/mantine-ui")
 	if err != nil {
 		panic(err)
 	}

@@ -93,7 +93,19 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 	// This prevents race conditions by determining keystone instance once per request
 	mainRouter.Use(keystoneResolutionMiddleware)
 
-	mainRouter.Methods(http.MethodGet).Path("/").HandlerFunc(redirectToRootPage)
+	mainRouter.Methods(http.MethodGet).Path("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if viper.GetBool("maia.new_ui_enabled") {
+			http.Redirect(w, r, "/ui/query", http.StatusFound)
+		} else {
+			redirectToRootPage(w, r)
+		}
+	})
+
+	// Readiness probe used by the React UI's ReadinessWrapper
+	mainRouter.Methods(http.MethodGet).Path("/-/ready").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("Maia is Ready."))
+	})
 
 	// the API is versioned, other paths are not
 	apiRouter := mainRouter.PathPrefix("/api/").Subrouter()
@@ -128,12 +140,13 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 		mainRouter.Methods(http.MethodGet).Path("/ui").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/ui/query", http.StatusFound)
 		})
-		mainRouter.Methods(http.MethodGet).PathPrefix("/ui/assets/").Handler(
-			http.StripPrefix("/ui/", http.FileServer(newui.Assets)))
-		mainRouter.Methods(http.MethodGet).Path("/ui/favicon.svg").Handler(
-			http.StripPrefix("/ui/", http.FileServer(newui.Assets)))
-		mainRouter.Methods(http.MethodGet).Path("/ui/manifest.json").Handler(
-			http.StripPrefix("/ui/", http.FileServer(newui.Assets)))
+		// Strip /ui/ prefix; MantineUIAssets is rooted at mantine-ui/
+		// so /ui/assets/foo.js → assets/foo.js inside MantineUIAssets
+		uiFileServer := http.StripPrefix("/ui/", http.FileServer(newui.MantineUIAssets))
+		mainRouter.Methods(http.MethodGet).PathPrefix("/ui/assets/").Handler(uiFileServer)
+		mainRouter.Methods(http.MethodGet).Path("/ui/favicon.svg").Handler(uiFileServer)
+		mainRouter.Methods(http.MethodGet).Path("/ui/manifest.json").Handler(uiFileServer)
+		// SPA catch-all: all other /ui/* paths get index.html
 		mainRouter.Methods(http.MethodGet).PathPrefix("/ui/").HandlerFunc(serveReactApp)
 	}
 
@@ -263,7 +276,7 @@ func Federate(w http.ResponseWriter, req *http.Request) {
 // It reads index.html from the embedded assets and replaces Prometheus
 // placeholders with Maia-appropriate values before writing the response.
 func serveReactApp(w http.ResponseWriter, req *http.Request) {
-	f, err := newui.Assets.Open("mantine-ui/index.html")
+	f, err := newui.MantineUIAssets.Open("index.html")
 	if err != nil {
 		http.Error(w, "UI not available", http.StatusNotFound)
 		return
