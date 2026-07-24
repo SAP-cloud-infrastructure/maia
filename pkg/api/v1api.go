@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -40,6 +41,10 @@ func NewV1Handler(keystoneDriver keystone.Driver, storageDriver storage.Driver) 
 
 	// Note: Keystone resolution is handled by keystoneResolutionMiddleware at router level
 	// This eliminates race conditions by ensuring consistent keystone selection throughout request lifecycle
+
+	// identity endpoints (auth only, no policy enforcement)
+	r.Methods(http.MethodGet).Path("/whoami").HandlerFunc(authenticateOnly(p.Whoami, false))
+	r.Methods(http.MethodGet).Path("/projects").HandlerFunc(authenticateOnly(p.Projects, false))
 
 	// tenant-aware query
 	r.Methods(http.MethodGet).Path("/query").HandlerFunc(authorize(
@@ -238,4 +243,59 @@ func (p *v1Provider) Labels(w http.ResponseWriter, req *http.Request) {
 	}
 
 	ReturnResponse(w, resp)
+}
+
+// whoamiResponse is the JSON shape returned by GET /api/v1/whoami.
+type whoamiResponse struct {
+	UserID         string   `json:"userId"`
+	UserName       string   `json:"userName"`
+	ProjectID      string   `json:"projectId"`
+	ProjectName    string   `json:"projectName"`
+	DomainID       string   `json:"domainId"`
+	DomainName     string   `json:"domainName"`
+	UserDomainName string   `json:"userDomainName"`
+	Roles          []string `json:"roles"`
+}
+
+func (p *v1Provider) Whoami(w http.ResponseWriter, req *http.Request) {
+	h := req.Header
+	rolesRaw := h.Get("X-Roles")
+	roles := []string{}
+	if rolesRaw != "" {
+		for _, r := range strings.Split(rolesRaw, ",") {
+			if r = strings.TrimSpace(r); r != "" {
+				roles = append(roles, r)
+			}
+		}
+	}
+	ReturnJSON(w, http.StatusOK, whoamiResponse{
+		UserID:         h.Get("X-User-Id"),
+		UserName:       h.Get("X-User-Name"),
+		ProjectID:      h.Get("X-Project-Id"),
+		ProjectName:    h.Get("X-Project-Name"),
+		DomainID:       h.Get("X-Domain-Id"),
+		DomainName:     h.Get("X-Domain-Name"),
+		UserDomainName: h.Get("X-User-Domain-Name"),
+		Roles:          roles,
+	})
+}
+
+// projectEntry is a single project entry in the GET /api/v1/projects response.
+type projectEntry struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func (p *v1Provider) Projects(w http.ResponseWriter, req *http.Request) {
+	userID := req.Header.Get("X-User-Id")
+	scopes, err := p.keystone.UserProjects(req.Context(), userID)
+	if err != nil {
+		ReturnPromError(w, err, http.StatusInternalServerError)
+		return
+	}
+	result := make([]projectEntry, 0, len(scopes))
+	for _, s := range scopes {
+		result = append(result, projectEntry{ID: s.ProjectID, Name: s.ProjectName})
+	}
+	ReturnJSON(w, http.StatusOK, result)
 }

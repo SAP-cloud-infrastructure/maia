@@ -100,6 +100,85 @@ func expectAuthAndDenyAuthorization(keystoneMock *keystone.MockDriver) {
 	keystoneMock.EXPECT().AuthenticateRequest(test.MatchContext(), httpReqMatcher, false).Return(projectInsufficientRolesContext, nil)
 }
 
+func expectAuthOnly(keystoneMock *keystone.MockDriver) {
+	httpReqMatcher := test.HTTPRequestMatcher{InjectHeader: map[string]string{
+		"X-User-Id":          projectContext.Auth["user_id"],
+		"X-User-Name":        projectContext.Auth["user_name"],
+		"X-User-Domain-Name": projectContext.Auth["user_domain_name"],
+		"X-Project-Id":       projectContext.Auth["project_id"],
+		"X-Project-Name":     projectContext.Auth["project_name"],
+		"X-Roles":            "monitoring_viewer",
+	}}
+	keystoneMock.EXPECT().AuthenticateRequest(test.MatchContext(), httpReqMatcher, false).Return(projectContext, nil)
+}
+
+func TestWhoami(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	router, keystoneMock, _ := setupTest(t, ctrl)
+
+	expectAuthOnly(keystoneMock)
+
+	test.APIRequest{
+		Headers:          map[string]string{"X-Auth-Token": "someverylongtokenideed"},
+		Method:           "GET",
+		Path:             "/api/v1/whoami",
+		ExpectStatusCode: http.StatusOK,
+		ExpectJSON:       "fixtures/whoami.json",
+	}.Check(t, router)
+}
+
+func TestWhoami_unauthenticated(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	router, keystoneMock, _ := setupTest(t, ctrl)
+
+	keystoneMock.EXPECT().AuthenticateRequest(test.MatchContext(), gomock.Any(), false).
+		Return(nil, keystone.NewAuthenticationError(keystone.StatusMissingCredentials, "no credentials"))
+
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/api/v1/whoami",
+		ExpectStatusCode: http.StatusUnauthorized,
+	}.Check(t, router)
+}
+
+func TestProjects(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	router, keystoneMock, _ := setupTest(t, ctrl)
+
+	expectAuthOnly(keystoneMock)
+	keystoneMock.EXPECT().UserProjects(test.MatchContext(), projectContext.Auth["user_id"]).
+		Return([]tokens.Scope{
+			{ProjectID: "12345", ProjectName: "testproject"},
+			{ProjectID: "67890", ProjectName: "otherproject"},
+		}, nil)
+
+	test.APIRequest{
+		Headers:          map[string]string{"X-Auth-Token": "someverylongtokenideed"},
+		Method:           "GET",
+		Path:             "/api/v1/projects",
+		ExpectStatusCode: http.StatusOK,
+		ExpectJSON:       "fixtures/projects.json",
+	}.Check(t, router)
+}
+
+func TestProjects_unauthenticated(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	router, keystoneMock, _ := setupTest(t, ctrl)
+
+	keystoneMock.EXPECT().AuthenticateRequest(test.MatchContext(), gomock.Any(), false).
+		Return(nil, keystone.NewAuthenticationError(keystone.StatusMissingCredentials, "no credentials"))
+
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/api/v1/projects",
+		ExpectStatusCode: http.StatusUnauthorized,
+	}.Check(t, router)
+}
+
 // HTTP based tests
 
 func TestFederate(t *testing.T) {

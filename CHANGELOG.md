@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `GET /api/v1/whoami` endpoint returning caller identity (user, project, domain, roles)
+- Add `GET /api/v1/projects` endpoint returning caller's scoped project list
 - Add sentinel label value for global metric visibility (`maia.label_value_for_global_visibility` config option, disabled by default)
 
 ### Security

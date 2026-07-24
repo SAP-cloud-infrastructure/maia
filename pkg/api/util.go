@@ -393,6 +393,25 @@ func setAuthCookies(req *http.Request, w http.ResponseWriter) {
 	})
 }
 
+// authenticateOnly runs Keystone authentication but skips policy enforcement.
+// Use for endpoints that return identity data rather than metric data.
+func authenticateOnly(next http.HandlerFunc, guessScope bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		ks := getKeystoneFromContext(req.Context())
+		if ks == nil {
+			http.Error(w, "Internal server error: keystone context not available", http.StatusInternalServerError)
+			logg.Error("Missing keystone context - request may have bypassed keystoneResolutionMiddleware")
+			return
+		}
+		_, authErr := ks.AuthenticateRequest(req.Context(), req, guessScope)
+		if authErr != nil {
+			ReturnPromError(w, authErr, http.StatusUnauthorized)
+			return
+		}
+		next(w, req)
+	}
+}
+
 func authorize(wrappedHandlerFunc func(w http.ResponseWriter, req *http.Request),
 	guessScope bool, rule string) func(w http.ResponseWriter, req *http.Request) {
 
