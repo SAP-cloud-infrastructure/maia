@@ -1,11 +1,12 @@
 import { QueryKey, useQuery, useSuspenseQuery } from "@tanstack/react-query";
-import { useSettings } from "../state/settingsSlice";
 // MAIA: replaced fetch with maiaFetch for X-Auth-Token injection
 import { maiaFetch } from "../lib/maiaFetch";
 // MAIA: inject project_id into every API call
 import { useMaiaProject } from "../context/MaiaProjectContext";
 
-export const API_PATH = "api/v1";
+// MAIA: API is always at the server root, not under pathPrefix (/ui/).
+// Using an absolute path prevents /ui/api/v1/... misrouting.
+export const API_PATH = "/api/v1";
 
 export type SuccessAPIResponse<T> = {
   status: "success";
@@ -24,12 +25,10 @@ export type APIResponse<T> = SuccessAPIResponse<T> | ErrorAPIResponse;
 
 const createQueryFn =
   <T>({
-    pathPrefix,
     path,
     params,
     recordResponseTime,
   }: {
-    pathPrefix: string;
     path: string;
     params?: Record<string, string>;
     recordResponseTime?: (time: number) => void;
@@ -42,9 +41,10 @@ const createQueryFn =
     try {
       const startTime = Date.now();
 
-      // MAIA: replaced fetch with maiaFetch
+      // MAIA: API_PATH is absolute (/api/v1) so pathPrefix is intentionally
+      // ignored here — avoids /ui/api/v1/... when app is served under /ui/.
       const res = await maiaFetch(
-        `${pathPrefix}/${API_PATH}${path}${queryString}`,
+        `${API_PATH}${path}${queryString}`,
         {
           cache: "no-store",
           signal,
@@ -109,7 +109,6 @@ export const useAPIQuery = <T>({
   recordResponseTime,
   refetchInterval,
 }: QueryOptions) => {
-  const { pathPrefix } = useSettings();
   // MAIA: inject project_id into every API call
   const { currentProject } = useMaiaProject();
   const maiaParams = currentProject
@@ -123,12 +122,11 @@ export const useAPIQuery = <T>({
     refetchInterval: refetchInterval,
     gcTime: 0,
     enabled,
-    queryFn: createQueryFn({ pathPrefix, path, params: maiaParams, recordResponseTime }),
+    queryFn: createQueryFn({ path, params: maiaParams, recordResponseTime }),
   });
 };
 
 export const useSuspenseAPIQuery = <T>({ key, path, params }: QueryOptions) => {
-  const { pathPrefix } = useSettings();
   // MAIA: inject project_id into every API call
   const { currentProject } = useMaiaProject();
   const maiaParams = currentProject
@@ -141,6 +139,6 @@ export const useSuspenseAPIQuery = <T>({ key, path, params }: QueryOptions) => {
     refetchOnWindowFocus: false,
     staleTime: Infinity,
     gcTime: 0,
-    queryFn: createQueryFn({ pathPrefix, path, params: maiaParams }),
+    queryFn: createQueryFn({ path, params: maiaParams }),
   });
 };

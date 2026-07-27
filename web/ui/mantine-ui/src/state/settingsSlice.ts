@@ -48,20 +48,6 @@ const getPathPrefix = (path: string) => {
   }
 
   const pagePaths = [
-    // MAIA: /ui/* paths must come BEFORE the bare paths — find() returns
-    // the first match, and "/ui/query" ends with both "/ui/query" and "/query".
-    // Longer (more specific) entries must win.
-    "/ui/query",
-    "/ui/alerts",
-    "/ui/targets",
-    "/ui/rules",
-    "/ui/service-discovery",
-    "/ui/status",
-    "/ui/tsdb-status",
-    "/ui/flags",
-    "/ui/config",
-    "/ui/alertmanager-discovery",
-    "/ui",
     "/query",
     "/alerts",
     "/targets",
@@ -73,6 +59,10 @@ const getPathPrefix = (path: string) => {
     "/config",
     "/alertmanager-discovery",
     "/agent",
+    // MAIA: do NOT add /ui/* variants here — the endsWith logic already handles
+    // them correctly. e.g. "/ui/query".endsWith("/query") → true → returns "/ui"
+    // as pathPrefix, which becomes the BrowserRouter basename. Adding "/ui/query"
+    // here would strip too much and return "" instead of "/ui".
   ];
 
   const pagePath = pagePaths.find((p) => path.endsWith(p));
