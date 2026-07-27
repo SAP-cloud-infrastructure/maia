@@ -48,6 +48,8 @@ func NewV1Handler(keystoneDriver keystone.Driver, storageDriver storage.Driver) 
 
 	// parse_query is a pure syntax check — no tenant scope needed, proxy directly (auth only)
 	r.Methods(http.MethodGet).Path("/parse_query").HandlerFunc(authenticateOnly(p.ParseQuery, false))
+	// metadata is metric metadata — no tenant scope needed, proxy directly (auth only)
+	r.Methods(http.MethodGet).Path("/metadata").HandlerFunc(authenticateOnly(p.Metadata, false))
 
 	// tenant-aware query
 	r.Methods(http.MethodGet).Path("/query").HandlerFunc(authorize(
@@ -251,6 +253,16 @@ func (p *v1Provider) Labels(w http.ResponseWriter, req *http.Request) {
 func (p *v1Provider) ParseQuery(w http.ResponseWriter, req *http.Request) {
 	query := req.URL.Query().Get("query")
 	resp, err := p.storage.ParseQuery(query, req.Header.Get("Accept"))
+	if err != nil {
+		ReturnPromError(w, err, http.StatusServiceUnavailable)
+		return
+	}
+	ReturnResponse(w, resp)
+}
+
+func (p *v1Provider) Metadata(w http.ResponseWriter, req *http.Request) {
+	q := req.URL.Query()
+	resp, err := p.storage.Metadata(q.Get("metric"), q.Get("limit"), req.Header.Get("Accept"))
 	if err != nil {
 		ReturnPromError(w, err, http.StatusServiceUnavailable)
 		return
