@@ -172,6 +172,19 @@ func scopeToLabelConstraint(req *http.Request, keystoneDriver keystone.Driver) (
 		return "domain_id", appendSentinelValue([]string{domainID})
 	}
 
+	// MAIA: fallback — React UI passes project_id as a query param (injected by useAPIQuery).
+	// Read it here so that scope-aware queries work without requiring explicit scope headers.
+	if projectID := req.URL.Query().Get("project_id"); projectID != "" {
+		logg.Debug("[SCOPE_DEBUG] Found project_id query param: %s", projectID)
+		children, err := keystoneDriver.ChildProjects(ctx, projectID)
+		if err != nil {
+			logg.Error("[SCOPE_DEBUG] ChildProjects failed for %s: %v", projectID, err)
+			panic(err)
+		}
+		allProjects := append([]string{projectID}, children...)
+		return "project_id", appendSentinelValue(allProjects)
+	}
+
 	logg.Error("[SCOPE_DEBUG] No X-Project-Id or X-Domain-Id found in headers")
 	panic(errors.New("missing OpenStack scope attributes in request header"))
 }
