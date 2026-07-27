@@ -4,7 +4,6 @@ import "@mantine/notifications/styles.css";
 import "@mantine/dates/styles.css";
 import "./mantine-overrides.css";
 import classes from "./App.module.css";
-import PrometheusLogo from "./images/prometheus-logo.svg";
 
 import {
   AppShell,
@@ -19,7 +18,6 @@ import {
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import {
-  IconBook,
   IconDeviceDesktopAnalytics,
   IconSearch,
 } from "@tabler/icons-react";
@@ -41,11 +39,12 @@ import { Notifications } from "@mantine/notifications";
 import { useSettings } from "./state/settingsSlice";
 import SettingsMenu from "./components/SettingsMenu";
 import ReadinessWrapper from "./components/ReadinessWrapper";
-import NotificationsProvider from "./components/NotificationsProvider";
-import NotificationsIcon from "./components/NotificationsIcon";
+// MAIA: disabled — NotificationsProvider and NotificationsIcon use /api/v1/notifications/live SSE
+// import NotificationsProvider from "./components/NotificationsProvider";
+// import NotificationsIcon from "./components/NotificationsIcon";
 import { QueryParamProvider } from "use-query-params";
 import { ReactRouter6Adapter } from "use-query-params/adapters/react-router-6";
-import { actionIconStyle, navIconStyle } from "./styles";
+import { navIconStyle } from "./styles";
 // MAIA: project context provider and switcher
 import { MaiaProjectProvider } from "./context/MaiaProjectContext";
 import { MaiaProjectSwitcher } from "./components/MaiaProjectSwitcher";
@@ -131,20 +130,8 @@ function App() {
   const navActionIcons = (
     <>
       <ThemeSelector />
-      <NotificationsIcon />
+      {/* MAIA: disabled — NotificationsIcon triggers /api/v1/notifications/live SSE */}
       <SettingsMenu />
-      <Button
-        component="a"
-        href="https://prometheus.io/docs/prometheus/latest/getting_started/"
-        target="_blank"
-        color="gray"
-        title="Documentation"
-        aria-label="Documentation"
-        size="xs"
-        variant="subtle"
-      >
-        <IconBook style={actionIconStyle} />
-      </Button>
     </>
   );
 
@@ -166,8 +153,8 @@ function App() {
                   }}
                   padding="md"
                 >
-                  <NotificationsProvider>
-                    <AppShell.Header bg="rgb(65, 73, 81)" c="#fff">
+                  {/* MAIA: NotificationsProvider removed — it opens /api/v1/notifications/live SSE */}
+                  <AppShell.Header bg="rgb(65, 73, 81)" c="#fff">
                       <Group h="100%" px="md" wrap="nowrap">
                         <Group
                           style={{ flex: 1 }}
@@ -179,16 +166,10 @@ function App() {
                               to="/"
                               style={{ textDecoration: "none", color: "white" }}
                             >
-                              <Group gap={10} wrap="nowrap">
-                                <img src={PrometheusLogo} height={30} />
-                                {/* MAIA: branding */}
-                                <Text hiddenFrom="sm" fz={20}>
-                                  Maia
-                                </Text>
-                                <Text visibleFrom="md" fz={20}>
-                                  Maia
-                                </Text>
-                              </Group>
+                              {/* MAIA: replaced Prometheus logo+text with Maia wordmark */}
+                              <Text fz={22} fw={700} style={{ letterSpacing: 1 }}>
+                                Maia
+                              </Text>
                             </Link>
                             <Group gap={12} visibleFrom="sm" wrap="nowrap">
                               {navLinks}
@@ -216,7 +197,6 @@ function App() {
                         {navActionIcons}
                       </Group>
                     </AppShell.Navbar>
-                  </NotificationsProvider>
 
                   <AppShell.Main>
                     <ErrorBoundary key={location.pathname}>
