@@ -3,13 +3,11 @@ import "@mantine/code-highlight/styles.css";
 import "@mantine/notifications/styles.css";
 import "@mantine/dates/styles.css";
 import "./mantine-overrides.css";
-import classes from "./App.module.css";
 
 import {
   AppShell,
   Box,
   Burger,
-  Button,
   Group,
   MantineProvider,
   Skeleton,
@@ -18,13 +16,8 @@ import {
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import {
-  IconDeviceDesktopAnalytics,
-  IconSearch,
-} from "@tabler/icons-react";
-import {
   BrowserRouter,
   Link,
-  NavLink,
   Navigate,
   Route,
   Routes,
@@ -39,12 +32,9 @@ import { Notifications } from "@mantine/notifications";
 import { useSettings } from "./state/settingsSlice";
 import SettingsMenu from "./components/SettingsMenu";
 import ReadinessWrapper from "./components/ReadinessWrapper";
-// MAIA: disabled — NotificationsProvider and NotificationsIcon use /api/v1/notifications/live SSE
-// import NotificationsProvider from "./components/NotificationsProvider";
-// import NotificationsIcon from "./components/NotificationsIcon";
+// MAIA: NotificationsProvider/Icon disabled — they open /api/v1/notifications/live SSE
 import { QueryParamProvider } from "use-query-params";
 import { ReactRouter6Adapter } from "use-query-params/adapters/react-router-6";
-import { navIconStyle } from "./styles";
 // MAIA: project context provider and switcher
 import { MaiaProjectProvider } from "./context/MaiaProjectContext";
 import { MaiaProjectSwitcher } from "./components/MaiaProjectSwitcher";
@@ -60,77 +50,25 @@ import yamlLang from "highlight.js/lib/languages/yaml";
 hljs.registerLanguage("yaml", yamlLang);
 
 const highlightJsAdapter = createHighlightJsAdapter(hljs);
-
 const queryClient = new QueryClient();
-
-// MAIA: only Query is available in Maia — all Prometheus-specific pages disabled
-const mainNavPages = [
-  {
-    title: "Query",
-    path: "/query",
-    icon: <IconSearch style={navIconStyle} />,
-    element: <QueryPage />,
-    inAgentMode: false,
-  },
-];
 
 const theme = createTheme({
   colors: {
     "codebox-bg": [
-      "#f5f5f5",
-      "#e7e7e7",
-      "#cdcdcd",
-      "#b2b2b2",
-      "#9a9a9a",
-      "#8b8b8b",
-      "#848484",
-      "#717171",
-      "#656565",
-      "#575757",
+      "#f5f5f5", "#e7e7e7", "#cdcdcd", "#b2b2b2", "#9a9a9a",
+      "#8b8b8b", "#848484", "#717171", "#656565", "#575757",
     ],
   },
 });
 
-const navLinkXPadding = "md";
-
 function App() {
   const [opened, { toggle }] = useDisclosure();
-  const { agentMode, consolesLink, pathPrefix } = useSettings();
-
-  const navLinks = (
-    <>
-      {consolesLink && (
-        <Button
-          component="a"
-          href={consolesLink}
-          className={classes.link}
-          leftSection={<IconDeviceDesktopAnalytics style={navIconStyle} />}
-          px={navLinkXPadding}
-        >
-          Consoles
-        </Button>
-      )}
-      {mainNavPages
-        .filter((p) => !agentMode || p.inAgentMode)
-        .map((p) => (
-          <Button
-            key={p.path}
-            component={NavLink}
-            to={p.path}
-            className={classes.link}
-            leftSection={p.icon}
-            px={navLinkXPadding}
-          >
-            {p.title}
-          </Button>
-        ))}
-    </>
-  );
+  const { agentMode, pathPrefix } = useSettings();
 
   const navActionIcons = (
     <>
       <ThemeSelector />
-      {/* MAIA: disabled — NotificationsIcon triggers /api/v1/notifications/live SSE */}
+      {/* MAIA: NotificationsIcon removed — triggers /api/v1/notifications/live SSE */}
       <SettingsMenu />
     </>
   );
@@ -142,7 +80,7 @@ function App() {
           <CodeHighlightAdapterProvider adapter={highlightJsAdapter}>
             <Notifications position="top-right" />
             <QueryClientProvider client={queryClient}>
-              {/* MAIA: wrap with project provider so all child components can access current project */}
+              {/* MAIA: project provider — exposes currentProject to all children */}
               <MaiaProjectProvider>
                 <AppShell
                   header={{ height: 56 }}
@@ -153,50 +91,38 @@ function App() {
                   }}
                   padding="md"
                 >
-                  {/* MAIA: NotificationsProvider removed — it opens /api/v1/notifications/live SSE */}
                   <AppShell.Header bg="rgb(65, 73, 81)" c="#fff">
-                      <Group h="100%" px="md" wrap="nowrap">
-                        <Group
-                          style={{ flex: 1 }}
-                          justify="space-between"
-                          wrap="nowrap"
-                        >
-                          <Group gap={40} wrap="nowrap">
-                            <Link
-                              to="/"
-                              style={{ textDecoration: "none", color: "white" }}
-                            >
-                              {/* MAIA: replaced Prometheus logo+text with Maia wordmark */}
-                              <Text fz={22} fw={700} style={{ letterSpacing: 1 }}>
-                                Maia
-                              </Text>
-                            </Link>
-                            <Group gap={12} visibleFrom="sm" wrap="nowrap">
-                              {navLinks}
-                            </Group>
-                          </Group>
-                          <Group visibleFrom="xs" wrap="nowrap" gap="xs">
-                            {/* MAIA: project switcher + classic UI link */}
-                            <MaiaProjectSwitcher />
-                            {navActionIcons}
-                          </Group>
+                    <Group h="100%" px="md" wrap="nowrap">
+                      <Group style={{ flex: 1 }} justify="space-between" wrap="nowrap">
+                        <Group gap={40} wrap="nowrap">
+                          {/* MAIA: Maia wordmark links to /query */}
+                          <Link to="/query" style={{ textDecoration: "none", color: "white" }}>
+                            <Text fz={22} fw={700} style={{ letterSpacing: 1 }}>
+                              Maia
+                            </Text>
+                          </Link>
                         </Group>
-                        <Burger
-                          opened={opened}
-                          onClick={toggle}
-                          hiddenFrom="sm"
-                          size="sm"
-                          color="gray.2"
-                        />
+                        <Group visibleFrom="xs" wrap="nowrap" gap="xs">
+                          {/* MAIA: project switcher + Classic UI link */}
+                          <MaiaProjectSwitcher />
+                          {navActionIcons}
+                        </Group>
                       </Group>
-                    </AppShell.Header>
+                      <Burger
+                        opened={opened}
+                        onClick={toggle}
+                        hiddenFrom="sm"
+                        size="sm"
+                        color="gray.2"
+                      />
+                    </Group>
+                  </AppShell.Header>
 
-                    <AppShell.Navbar py="md" px={4} bg="rgb(65, 73, 81)" c="#fff">
-                      {navLinks}
-                      <Group mt="md" hiddenFrom="xs" justify="center">
-                        {navActionIcons}
-                      </Group>
-                    </AppShell.Navbar>
+                  <AppShell.Navbar py="md" px={4} bg="rgb(65, 73, 81)" c="#fff">
+                    <Group mt="md" hiddenFrom="xs" justify="center">
+                      {navActionIcons}
+                    </Group>
+                  </AppShell.Navbar>
 
                   <AppShell.Main>
                     <ErrorBoundary key={location.pathname}>
@@ -204,13 +130,7 @@ function App() {
                         fallback={
                           <Box mt="lg">
                             {Array.from(Array(10), (_, i) => (
-                              <Skeleton
-                                key={i}
-                                height={40}
-                                mb={15}
-                                width={1000}
-                                mx="auto"
-                              />
+                              <Skeleton key={i} height={40} mb={15} width={1000} mx="auto" />
                             ))}
                           </Box>
                         }
@@ -218,31 +138,12 @@ function App() {
                         <Routes>
                           <Route
                             path="/"
-                            element={
-                              <Navigate
-                                to={agentMode ? "/agent" : "/query"}
-                                replace
-                              />
-                            }
+                            element={<Navigate to={agentMode ? "/agent" : "/query"} replace />}
                           />
                           {agentMode ? (
-                            <Route
-                              path="/agent"
-                              element={
-                                <ReadinessWrapper>
-                                  <AgentPage />
-                                </ReadinessWrapper>
-                              }
-                            />
+                            <Route path="/agent" element={<ReadinessWrapper><AgentPage /></ReadinessWrapper>} />
                           ) : (
-                            <Route
-                              path="/query"
-                              element={
-                                <ReadinessWrapper>
-                                  <QueryPage />
-                                </ReadinessWrapper>
-                              }
-                            />
+                            <Route path="/query" element={<ReadinessWrapper><QueryPage /></ReadinessWrapper>} />
                           )}
                           {/* MAIA: redirect all Prometheus-only paths to /query */}
                           <Route path="/alerts" element={<Navigate to="/query" replace />} />
