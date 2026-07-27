@@ -97,6 +97,11 @@ func (promCli *prometheusStorageClient) Labels(start, end string, match []string
 	return promCli.sendToPrometheus("GET", promURL.String(), nil, map[string]string{"Accept": acceptContentType})
 }
 
+func (promCli *prometheusStorageClient) ParseQuery(query, acceptContentType string) (*http.Response, error) {
+	promURL := promCli.buildURL("/api/v1/parse_query", map[string]any{"query": query})
+	return promCli.sendToPrometheus("GET", promURL.String(), nil, map[string]string{"Accept": acceptContentType})
+}
+
 func (promCli *prometheusStorageClient) Federate(selectors []string, acceptContentType string) (*http.Response, error) {
 	promURL := promCli.buildURL("/federate", map[string]any{"match[]": selectors})
 

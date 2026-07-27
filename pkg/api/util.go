@@ -403,6 +403,10 @@ func authenticateOnly(next http.HandlerFunc, guessScope bool) http.HandlerFunc {
 			logg.Error("Missing keystone context - request may have bypassed keystoneResolutionMiddleware")
 			return
 		}
+		// Mirror the cookie→header logic from authorizeRules so token cookies work here too.
+		if cookie, err := req.Cookie(authTokenCookieName); err == nil && cookie.Value != "" && req.Header.Get(authTokenHeader) == "" {
+			req.Header.Set(authTokenHeader, cookie.Value)
+		}
 		_, authErr := ks.AuthenticateRequest(req.Context(), req, guessScope)
 		if authErr != nil {
 			ReturnPromError(w, authErr, http.StatusUnauthorized)

@@ -46,6 +46,9 @@ func NewV1Handler(keystoneDriver keystone.Driver, storageDriver storage.Driver) 
 	r.Methods(http.MethodGet).Path("/whoami").HandlerFunc(authenticateOnly(p.Whoami, false))
 	r.Methods(http.MethodGet).Path("/projects").HandlerFunc(authenticateOnly(p.Projects, false))
 
+	// parse_query is a pure syntax check — no tenant scope needed, proxy directly (auth only)
+	r.Methods(http.MethodGet).Path("/parse_query").HandlerFunc(authenticateOnly(p.ParseQuery, false))
+
 	// tenant-aware query
 	r.Methods(http.MethodGet).Path("/query").HandlerFunc(authorize(
 		observeDuration(observeResponseSize(p.Query, "query"), "query"),
@@ -242,6 +245,16 @@ func (p *v1Provider) Labels(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	ReturnResponse(w, resp)
+}
+
+func (p *v1Provider) ParseQuery(w http.ResponseWriter, req *http.Request) {
+	query := req.URL.Query().Get("query")
+	resp, err := p.storage.ParseQuery(query, req.Header.Get("Accept"))
+	if err != nil {
+		ReturnPromError(w, err, http.StatusServiceUnavailable)
+		return
+	}
 	ReturnResponse(w, resp)
 }
 

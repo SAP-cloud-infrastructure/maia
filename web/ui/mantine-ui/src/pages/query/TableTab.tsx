@@ -69,11 +69,11 @@ const TableTab: FC<TableTabProps> = ({ panelIdx, retriggerIdx, expr }) => {
             )
           }
         />
-        {!isFetching && data !== undefined && (
+        {!isFetching && data !== undefined && data.data.stats && (
           <QueryStatsDisplay
             numResults={data.data.result.length}
             responseTime={responseTime}
-            stats={data.data.stats!}
+            stats={data.data.stats}
           />
         )}
       </Group>

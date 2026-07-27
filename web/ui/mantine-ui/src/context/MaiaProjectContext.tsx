@@ -52,15 +52,24 @@ export const MaiaProjectProvider: FC<PropsWithChildren> = ({ children }) => {
   useEffect(() => {
     Promise.all([
       // MAIA: absolute paths — app is served at /ui/, relative URLs would resolve to /ui/api/v1/...
-      maiaFetch("/api/v1/whoami").then((r) => r.json()),
-      maiaFetch("/api/v1/projects").then((r) => r.json()),
-    ]).then(([whoami, projectList]: [MaiaUser, MaiaProject[]]) => {
+      maiaFetch("/api/v1/whoami"),
+      maiaFetch("/api/v1/projects"),
+    ]).then(async ([whoamiRes, projectsRes]) => {
+      if (!whoamiRes.ok || !projectsRes.ok) {
+        // Token missing or invalid — leave user/projects null, UI stays empty
+        return;
+      }
+      const whoami: MaiaUser = await whoamiRes.json();
+      const projectList: MaiaProject[] = await projectsRes.json();
+
       setUser(whoami);
       setProjects(projectList);
 
       const savedId = localStorage.getItem(LOCAL_STORAGE_KEY);
       const saved = projectList.find((p) => p.id === savedId);
       setCurrentProject(saved ?? projectList[0] ?? null);
+    }).catch(() => {
+      // Network error — fail silently, project switcher stays hidden
     });
   }, []);
 
