@@ -63,7 +63,16 @@ export const MaiaProjectProvider: FC<PropsWithChildren> = ({ children }) => {
       const projectList: MaiaProject[] = await projectsRes.json();
 
       setUser(whoami);
-      setProjects(projectList);
+
+      // MAIA: deduplicate by project ID — QA Keystone may return the same project
+      // multiple times when a user has more than one role assignment on it.
+      const seen = new Set<string>();
+      const unique = projectList.filter((p) => {
+        if (seen.has(p.id)) return false;
+        seen.add(p.id);
+        return true;
+      });
+      setProjects(unique);
 
       const savedId = localStorage.getItem(LOCAL_STORAGE_KEY);
       const saved = projectList.find((p) => p.id === savedId);

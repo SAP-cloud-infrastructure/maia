@@ -318,8 +318,15 @@ func (p *v1Provider) Projects(w http.ResponseWriter, req *http.Request) {
 		ReturnPromError(w, err, http.StatusInternalServerError)
 		return
 	}
+	// Deduplicate by project ID — a user may have multiple role assignments
+	// on the same project, causing Keystone to return it more than once.
+	seen := map[string]bool{}
 	result := make([]projectEntry, 0, len(scopes))
 	for _, s := range scopes {
+		if seen[s.ProjectID] {
+			continue
+		}
+		seen[s.ProjectID] = true
 		result = append(result, projectEntry{ID: s.ProjectID, Name: s.ProjectName})
 	}
 	ReturnJSON(w, http.StatusOK, result)
