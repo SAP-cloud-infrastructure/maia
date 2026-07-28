@@ -1,6 +1,6 @@
 // MAIA: project switcher navbar component — shows current project dropdown
 // and logged-in username. Maia-specific — do not overwrite during upstream syncs.
-import { Anchor, Group, Select, Text } from "@mantine/core";
+import { Group, Select, Text } from "@mantine/core";
 import { useMaiaProject } from "../context/MaiaProjectContext";
 
 export function MaiaProjectSwitcher() {
@@ -28,15 +28,7 @@ export function MaiaProjectSwitcher() {
         styles={{ input: { minWidth: 140 } }}
         allowDeselect={false}
       />
-      {/* MAIA: link back to classic UI */}
-      <Anchor
-        href={`/${user?.userDomainName ?? "Default"}/graph?project_id=${currentProject.id}`}
-        size="xs"
-        c="dimmed"
-        style={{ whiteSpace: "nowrap" }}
-      >
-        Classic UI
-      </Anchor>
+      {/* MAIA: Classic UI link moved to top banner — see App.tsx */}
     </Group>
   );
 }

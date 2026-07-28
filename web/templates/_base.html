@@ -30,9 +30,13 @@ SPDX-License-Identifier: Apache-2.0
 
 <body>
 {{ if .newUIEnabled }}
-<div class="alert alert-info text-center" style="margin-bottom:0; border-radius:0; padding:6px">
-  A new Maia UI is available. <a href="/ui/query"><strong>Try it →</strong></a>
+<div style="position:fixed; top:0; left:0; right:0; z-index:1031; background:#d9edf7; color:#31708f; text-align:center; padding:6px; font-size:14px; border-bottom:1px solid #bce8f1;">
+  A new Maia UI is available. <a href="/ui/query" style="color:#245269; font-weight:bold;">Try it →</a>
 </div>
+<style>
+  .navbar-fixed-top { top: 33px !important; }
+  body { padding-top: 83px !important; }
+</style>
 {{ end }}
 <nav class="navbar navbar-inverse navbar-fixed-top">
     <div class="container-fluid">

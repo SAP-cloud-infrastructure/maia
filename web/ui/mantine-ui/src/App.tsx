@@ -36,8 +36,35 @@ import ReadinessWrapper from "./components/ReadinessWrapper";
 import { QueryParamProvider } from "use-query-params";
 import { ReactRouter6Adapter } from "use-query-params/adapters/react-router-6";
 // MAIA: project context provider and switcher
-import { MaiaProjectProvider } from "./context/MaiaProjectContext";
+import { MaiaProjectProvider, useMaiaProject } from "./context/MaiaProjectContext";
 import { MaiaProjectSwitcher } from "./components/MaiaProjectSwitcher";
+
+// MAIA: full-width banner linking back to the classic UI — mirrors the
+// "Try new UI →" banner in web/templates/_base.html
+function ClassicUIBanner() {
+  const { user, currentProject } = useMaiaProject();
+  const domain = user?.userDomainName ?? "Default";
+  const projectId = currentProject?.id ?? "";
+  return (
+    <div style={{
+      background: "#d9edf7",
+      color: "#31708f",
+      textAlign: "center",
+      padding: "6px",
+      fontSize: "14px",
+      borderBottom: "1px solid #bce8f1",
+      width: "100%",
+    }}>
+      You are using the new Maia UI.{" "}
+      <a
+        href={`/${domain}/graph${projectId ? `?project_id=${projectId}` : ""}`}
+        style={{ color: "#245269", fontWeight: "bold" }}
+      >
+        ← Switch to Classic UI
+      </a>
+    </div>
+  );
+}
 
 import {
   CodeHighlightAdapterProvider,
@@ -80,10 +107,10 @@ function App() {
           <CodeHighlightAdapterProvider adapter={highlightJsAdapter}>
             <Notifications position="top-right" />
             <QueryClientProvider client={queryClient}>
-              {/* MAIA: project provider — exposes currentProject to all children */}
+              {/* MAIA: wrap with project provider — exposes currentProject to all children */}
               <MaiaProjectProvider>
                 <AppShell
-                  header={{ height: 56 }}
+                  header={{ height: 88 }}  // 56px navbar + 32px banner
                   navbar={{
                     width: 300,
                     breakpoint: "sm",
@@ -92,7 +119,9 @@ function App() {
                   padding="md"
                 >
                   <AppShell.Header bg="rgb(65, 73, 81)" c="#fff">
-                    <Group h="100%" px="md" wrap="nowrap">
+                    {/* MAIA: Classic UI banner at top of header */}
+                    <ClassicUIBanner />
+                    <Group h={56} px="md" wrap="nowrap">
                       <Group style={{ flex: 1 }} justify="space-between" wrap="nowrap">
                         <Group gap={40} wrap="nowrap">
                           {/* MAIA: Maia wordmark links to /query */}
