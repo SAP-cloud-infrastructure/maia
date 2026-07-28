@@ -9,7 +9,7 @@ RUN apk add --no-cache --no-progress ca-certificates gcc musl-dev git make
 
 COPY . /src
 ARG BININFO_BUILD_DATE BININFO_COMMIT_HASH BININFO_VERSION # provided to 'make install'
-RUN make -C /src install PREFIX=/pkg GOTOOLCHAIN=local
+RUN make -C /src install PREFIX=/pkg GOTOOLCHAIN=local GO_BUILDFLAGS="-tags builtinassets"
 
 ################################################################################
 
