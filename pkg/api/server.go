@@ -104,7 +104,7 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 	// Readiness probe used by the React UI's ReadinessWrapper
 	mainRouter.Methods(http.MethodGet).Path("/-/ready").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("Maia is Ready."))
+		io.WriteString(w, "Maia is Ready.") //nolint:errcheck
 	})
 
 	// the API is versioned, other paths are not
@@ -297,7 +297,7 @@ func serveReactApp(w http.ResponseWriter, req *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(html)
+	io.WriteString(w, string(html)) //nolint:errcheck
 }
 
 // graph returns the Prometheus UI page

@@ -408,7 +408,7 @@ func setAuthCookies(req *http.Request, w http.ResponseWriter) {
 
 // authenticateOnly runs Keystone authentication but skips policy enforcement.
 // Use for endpoints that return identity data rather than metric data.
-func authenticateOnly(next http.HandlerFunc, guessScope bool) http.HandlerFunc {
+func authenticateOnly(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		ks := getKeystoneFromContext(req.Context())
 		if ks == nil {
@@ -420,7 +420,7 @@ func authenticateOnly(next http.HandlerFunc, guessScope bool) http.HandlerFunc {
 		if cookie, err := req.Cookie(authTokenCookieName); err == nil && cookie.Value != "" && req.Header.Get(authTokenHeader) == "" {
 			req.Header.Set(authTokenHeader, cookie.Value)
 		}
-		_, authErr := ks.AuthenticateRequest(req.Context(), req, guessScope)
+		_, authErr := ks.AuthenticateRequest(req.Context(), req, false)
 		if authErr != nil {
 			ReturnPromError(w, authErr, http.StatusUnauthorized)
 			return

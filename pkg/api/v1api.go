@@ -43,13 +43,13 @@ func NewV1Handler(keystoneDriver keystone.Driver, storageDriver storage.Driver) 
 	// This eliminates race conditions by ensuring consistent keystone selection throughout request lifecycle
 
 	// identity endpoints (auth only, no policy enforcement)
-	r.Methods(http.MethodGet).Path("/whoami").HandlerFunc(authenticateOnly(p.Whoami, false))
-	r.Methods(http.MethodGet).Path("/projects").HandlerFunc(authenticateOnly(p.Projects, false))
+	r.Methods(http.MethodGet).Path("/whoami").HandlerFunc(authenticateOnly(p.Whoami))
+	r.Methods(http.MethodGet).Path("/projects").HandlerFunc(authenticateOnly(p.Projects))
 
 	// parse_query is a pure syntax check — no tenant scope needed, proxy directly (auth only)
-	r.Methods(http.MethodGet).Path("/parse_query").HandlerFunc(authenticateOnly(p.ParseQuery, false))
+	r.Methods(http.MethodGet).Path("/parse_query").HandlerFunc(authenticateOnly(p.ParseQuery))
 	// metadata is metric metadata — no tenant scope needed, proxy directly (auth only)
-	r.Methods(http.MethodGet).Path("/metadata").HandlerFunc(authenticateOnly(p.Metadata, false))
+	r.Methods(http.MethodGet).Path("/metadata").HandlerFunc(authenticateOnly(p.Metadata))
 
 	// tenant-aware query
 	r.Methods(http.MethodGet).Path("/query").HandlerFunc(authorize(
@@ -287,7 +287,7 @@ func (p *v1Provider) Whoami(w http.ResponseWriter, req *http.Request) {
 	rolesRaw := h.Get("X-Roles")
 	roles := []string{}
 	if rolesRaw != "" {
-		for _, r := range strings.Split(rolesRaw, ",") {
+		for r := range strings.SplitSeq(rolesRaw, ",") {
 			if r = strings.TrimSpace(r); r != "" {
 				roles = append(roles, r)
 			}
