@@ -36,12 +36,17 @@ typos:
   extendExcludes:
     - "web/static/vendor/"
     - "web/ui/node_modules/"
+    - "web/ui/module/"
+    - "web/ui/mantine-ui/src/pages/targets/"
+    - "web/ui/mantine-ui/src/pages/service-discovery/"
     - "docs/*.svg"
   extendWords:
     ba: ba
     Alue: Alue
     valu: valu
     tabl: tabl
+    pn: pn
+    ignor: ignor
 
 renovate:
   enabled: true

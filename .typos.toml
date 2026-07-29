@@ -7,11 +7,15 @@ Alue = "Alue"
 ba = "ba"
 tabl = "tabl"
 valu = "valu"
+pn = "pn"
+ignor = "ignor"
 
 
 [files]
 extend-exclude = [
   "go.mod",
   "web/static/vendor/",
+  "web/ui/node_modules/",
+  "web/ui/module/",
   "docs/*.svg",
 ]
