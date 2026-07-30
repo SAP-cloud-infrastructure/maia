@@ -137,7 +137,6 @@ type Driver interface {
 	Series(match []string, start, end string, acceptContentType string) (*http.Response, error)
 	LabelValues(name string, acceptContentType string) (*http.Response, error)
 	Labels(start, end string, match []string, acceptContentType string) (*http.Response, error)
-	ParseQuery(query string, acceptContentType string) (*http.Response, error)
 	Metadata(metric, limit string, acceptContentType string) (*http.Response, error)
 }
 

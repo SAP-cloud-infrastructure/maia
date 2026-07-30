@@ -16,7 +16,6 @@ import {
   IconChartAreaFilled,
   IconChartLine,
   IconGraph,
-  IconInfoCircle,
   IconTable,
 } from "@tabler/icons-react";
 import { FC, Suspense, useCallback, useMemo, useState } from "react";
@@ -41,7 +40,7 @@ import TreeView from "./TreeView";
 import ErrorBoundary from "../../components/ErrorBoundary";
 import ASTNode from "../../promql/ast";
 import serializeNode from "../../promql/serialize";
-import ExplainView from "./ExplainViews/ExplainView";
+// MAIA: ExplainView removed — parse_query not available on Thanos backends
 import { actionIconStyle } from "../../styles";
 
 export interface PanelProps {
@@ -164,12 +163,8 @@ const QueryPanel: FC<PanelProps> = ({ idx, metricNames }) => {
           <Tabs.Tab value="graph" leftSection={<IconGraph style={iconStyle} />}>
             Graph
           </Tabs.Tab>
-          <Tabs.Tab
-            value="explain"
-            leftSection={<IconInfoCircle style={iconStyle} />}
-          >
-            Explain
-          </Tabs.Tab>
+          {/* MAIA: Explain tab disabled — requires /api/v1/parse_query which
+              is not available on Thanos query frontends */}
         </Tabs.List>
         <Tabs.Panel pt="sm" value="table">
           <TableTab expr={expr} panelIdx={idx} retriggerIdx={retriggerIdx} />
@@ -348,30 +343,7 @@ const QueryPanel: FC<PanelProps> = ({ idx, metricNames }) => {
             onSelectRange={onSelectRange}
           />
         </Tabs.Panel>
-        <Tabs.Panel pt="sm" value="explain">
-          <ErrorBoundary
-            key={selectedNode?.id}
-            title="Error showing explain view"
-          >
-            <Suspense
-              fallback={
-                <Box mt="lg">
-                  {Array.from(Array(20), (_, i) => (
-                    <Skeleton key={i} height={30} mb={15} width="100%" />
-                  ))}
-                </Box>
-              }
-            >
-              <ExplainView
-                node={selectedNode?.node ?? null}
-                treeShown={panel.showTree}
-                showTree={() => {
-                  dispatch(setShowTree({ idx, showTree: true }));
-                }}
-              />
-            </Suspense>
-          </ErrorBoundary>
-        </Tabs.Panel>
+        {/* MAIA: Explain tab panel removed — parse_query not available on Thanos */}
       </Tabs>
     </Stack>
   );
