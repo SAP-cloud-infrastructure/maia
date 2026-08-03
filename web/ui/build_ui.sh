@@ -21,6 +21,19 @@ export npm_config_confirm_modules_purge=false
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STATIC_DIR="${SCRIPT_DIR}/static"
 
+# Bootstrap pnpm if it is not already on PATH. The GitHub Actions runner (and a
+# bare `make generate`) only provisions Go, not a JS toolchain, but the Node it
+# ships bundles corepack, which can activate the exact pnpm pinned in
+# web/ui/package.json ("packageManager"). This keeps the runner, Docker, and a
+# laptop all on the same pnpm that wrote pnpm-lock.yaml, so --frozen-lockfile
+# below stays deterministic. Docker still pre-installs pnpm for speed; there
+# this branch is skipped.
+if ! command -v pnpm >/dev/null 2>&1; then
+  echo ">> pnpm not found — bootstrapping via corepack"
+  corepack enable
+  corepack prepare --activate
+fi
+
 if ! [[ -w $HOME ]]; then
   export npm_config_cache
   npm_config_cache=$(mktemp -d)
