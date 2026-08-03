@@ -402,7 +402,7 @@ func (d *keystone) AuthenticateRequest(ctx context.Context, r *http.Request, gue
 	// client-supplied X-Roles cannot survive and be trusted downstream; the
 	// consumers (Whoami, the authorization error message) split on ",".
 	// Assumes Keystone role names contain no commas (they don't), otherwise a
-	// name would be silently mis-split on read.
+	// name would be silently split at the wrong boundary on read.
 	r.Header.Del("X-Roles")
 	if len(policyContext.Roles) > 0 {
 		r.Header.Set("X-Roles", strings.Join(policyContext.Roles, ","))
