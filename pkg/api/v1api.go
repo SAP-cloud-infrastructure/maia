@@ -45,8 +45,8 @@ func NewV1Handler(keystoneDriver keystone.Driver, storageDriver storage.Driver) 
 	// identity endpoints (auth only, no policy enforcement)
 	r.Methods(http.MethodGet).Path("/whoami").HandlerFunc(authenticateOnly(p.Whoami))
 	r.Methods(http.MethodGet).Path("/projects").HandlerFunc(authenticateOnly(p.Projects))
-	// metadata is metric metadata — no tenant scope needed, proxy directly (auth only)
-	r.Methods(http.MethodGet).Path("/metadata").HandlerFunc(authenticateOnly(p.Metadata))
+	// metadata requires monitoring role — same as label values to prevent cross-tenant enumeration
+	r.Methods(http.MethodGet).Path("/metadata").HandlerFunc(authorize(p.Metadata, false, "metric:list"))
 	// MAIA: parse_query removed — not available on Thanos query frontends
 
 	// tenant-aware query

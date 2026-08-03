@@ -121,7 +121,10 @@ export const useAPIQuery = <T>({
     refetchOnWindowFocus: false,
     refetchInterval: refetchInterval,
     gcTime: 0,
-    enabled,
+    // MAIA: don't fire until project is loaded — avoids scope-less queries
+    // that would silently fall back to the Keystone token scope instead of
+    // the project the user selected in the switcher.
+    enabled: enabled !== false && currentProject !== null,
     queryFn: createQueryFn({ path, params: maiaParams, recordResponseTime }),
   });
 };

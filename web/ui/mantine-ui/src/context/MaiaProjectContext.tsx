@@ -32,15 +32,27 @@ interface MaiaProjectContextValue {
   user: MaiaUser | null;
   projects: MaiaProject[];
   currentProject: MaiaProject | null;
+  // isLoading is true during the initial whoami/projects fetch.
+  // Consumers can use this to show a skeleton instead of empty state.
+  isLoading: boolean;
   setProject: (project: MaiaProject) => void;
 }
 
 const LOCAL_STORAGE_KEY = "maia_project_id";
 
+// Read a non-HttpOnly cookie value by name (HttpOnly cookies are JS-invisible).
+function getCookie(name: string): string | undefined {
+  return document.cookie
+    .split("; ")
+    .find((r) => r.startsWith(`${name}=`))
+    ?.split("=")[1];
+}
+
 const MaiaProjectContext = createContext<MaiaProjectContextValue>({
   user: null,
   projects: [],
   currentProject: null,
+  isLoading: true,
   setProject: () => undefined,
 });
 
@@ -48,6 +60,7 @@ export const MaiaProjectProvider: FC<PropsWithChildren> = ({ children }) => {
   const [user, setUser] = useState<MaiaUser | null>(null);
   const [projects, setProjects] = useState<MaiaProject[]>([]);
   const [currentProject, setCurrentProject] = useState<MaiaProject | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
@@ -56,9 +69,21 @@ export const MaiaProjectProvider: FC<PropsWithChildren> = ({ children }) => {
       maiaFetch("/api/v1/projects"),
     ]).then(async ([whoamiRes, projectsRes]) => {
       if (!whoamiRes.ok || !projectsRes.ok) {
-        // Token missing or invalid — leave user/projects null, UI stays empty
+        const status = !whoamiRes.ok ? whoamiRes.status : projectsRes.status;
+        if (status === 401) {
+          // No valid session — redirect to the classic UI for login.
+          // The classic UI shows a Basic Auth prompt and sets the auth cookie.
+          // X-User-Domain-Name is a non-HttpOnly cookie (readable by JS) set
+          // by the server after a successful login to remember the user's domain.
+          const domain = getCookie("X-User-Domain-Name") ?? "Default";
+          window.location.href = `/${domain}/graph`;
+          return;
+        }
+        // Other error (5xx, network issue) — fail gracefully, stay on page
+        setIsLoading(false);
         return;
       }
+
       const whoami: MaiaUser = await whoamiRes.json();
       const projectList: MaiaProject[] = await projectsRes.json();
 
@@ -75,10 +100,12 @@ export const MaiaProjectProvider: FC<PropsWithChildren> = ({ children }) => {
       setProjects(unique);
 
       const savedId = localStorage.getItem(LOCAL_STORAGE_KEY);
-      const saved = projectList.find((p) => p.id === savedId);
-      setCurrentProject(saved ?? projectList[0] ?? null);
+      const saved = unique.find((p) => p.id === savedId);
+      setCurrentProject(saved ?? unique[0] ?? null);
+      setIsLoading(false);
     }).catch(() => {
-      // Network error — fail silently, project switcher stays hidden
+      // Network error — fail gracefully, stay on page
+      setIsLoading(false);
     });
   }, []);
 
@@ -88,7 +115,7 @@ export const MaiaProjectProvider: FC<PropsWithChildren> = ({ children }) => {
   }, []);
 
   return (
-    <MaiaProjectContext.Provider value={{ user, projects, currentProject, setProject }}>
+    <MaiaProjectContext.Provider value={{ user, projects, currentProject, isLoading, setProject }}>
       {children}
     </MaiaProjectContext.Provider>
   );
