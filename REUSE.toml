@@ -35,13 +35,10 @@ path = [
   "web/ui/.gitignore",
   "web/ui/.nvmrc",
   "web/ui/embed.go.tmpl",
-  "web/ui/package-lock.json",
 ]
 SPDX-FileCopyrightText = "SAP SE or an SAP affiliate company"
 SPDX-License-Identifier = "Apache-2.0"
 
-# Upstream Prometheus mantine-ui — Apache-2.0, copyright The Prometheus Authors
-# These files are forked from https://github.com/prometheus/prometheus at v3.11.2
 [[annotations]]
 path = [
   "web/ui/README.md",
@@ -55,13 +52,21 @@ path = [
 SPDX-FileCopyrightText = "The Prometheus Authors"
 SPDX-License-Identifier = "Apache-2.0"
 
-# Maia-specific UI files — override the upstream annotation above
+[[annotations]]
+path = [
+  "web/ui/mantine-ui/src/components/Accordion/**",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "The Prometheus Authors"
+SPDX-License-Identifier = "MIT AND Apache-2.0"
+
 [[annotations]]
 path = [
   "web/ui/mantine-ui/src/lib/maiaFetch.ts",
   "web/ui/mantine-ui/src/context/MaiaProjectContext.tsx",
   "web/ui/mantine-ui/src/components/MaiaProjectSwitcher.tsx",
 ]
+precedence = "override"
 SPDX-FileCopyrightText = "SAP SE or an SAP affiliate company"
 SPDX-License-Identifier = "Apache-2.0"
 

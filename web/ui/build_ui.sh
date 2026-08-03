@@ -11,6 +11,13 @@
 
 set -euo pipefail
 
+# Run non-interactively everywhere. Without a TTY (Concourse/BuildKit), pnpm
+# otherwise aborts with ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY when it needs
+# to reconcile a stale node_modules. CI=true + confirmModulesPurge=false make
+# the install deterministic on a laptop, in Docker, and in the pipeline alike.
+export CI=true
+export npm_config_confirm_modules_purge=false
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STATIC_DIR="${SCRIPT_DIR}/static"
 

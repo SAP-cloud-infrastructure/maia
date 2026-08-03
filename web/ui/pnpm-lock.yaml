@@ -4,8 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-pnpmfileChecksum: sha256-rVcU8Y44ylXgw7RIXa3R6GmrhNfM8Ms+HStH+kr208c=
-
 importers:
 
   .:
@@ -270,6 +268,9 @@ importers:
       '@rollup/plugin-node-resolve':
         specifier: ^16.0.3
         version: 16.0.3(rollup@4.62.2)
+      rollup:
+        specifier: ^4.62.2
+        version: 4.62.2
 
 packages:
 

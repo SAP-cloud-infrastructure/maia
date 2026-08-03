@@ -24,5 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Prevent cross-tenant metric access: strip client-supplied `X-Project-Id`/`X-Domain-Id` scope headers on authentication so scope is always derived from the validated token
+- Verify project membership before honoring the `project_id` query parameter, so an authenticated user cannot read another tenant's metrics by supplying a foreign project ID
 - Bump `github.com/prometheus/prometheus` to v0.311.3 (CVE-2026-42151, CVE-2026-42154, CVE-2026-44903)
 - Enforce upstream host equality on Prometheus storage requests as defense-in-depth against SSRF (CodeQL `go/request-forgery`)

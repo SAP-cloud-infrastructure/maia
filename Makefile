@@ -33,27 +33,20 @@ endif
 
 default: build-all
 
-ifdef DEBUG
-	BINDDATA_FLAGS = -debug
-endif
-
 build/maia: generate
 static-check: generate
 
+build/maia: GO_BUILDFLAGS += -tags builtinassets
+
 generate: FORCE
 	if ! hash mockgen 2>/dev/null; then go install go.uber.org/mock/mockgen@v0.6.0; fi
-	if ! hash go-bindata 2>/dev/null; then go install github.com/go-bindata/go-bindata/go-bindata@v3.1.2+incompatible; fi
 	if ! hash addlicense 2>/dev/null; then go install github.com/google/addlicense@v1.2.0; fi
 
 	mockgen --source=pkg/storage/interface.go --destination=pkg/storage/genmock.go --package=storage
 	mockgen --source=pkg/keystone/interface.go --destination=pkg/keystone/genmock.go --package=keystone
 
-
-	go-bindata $(BINDDATA_FLAGS) -pkg ui -o pkg/ui/bindata.go -ignore '(.*\.map|bootstrap\.js|bootstrap-theme\.css|bootstrap\.css)'  web/templates/... web/static/...
-	gofmt -s -w ./pkg/ui/bindata.go
-
-	# Add license header to the generated bindata.go file
-	addlicense -c "SAP SE" ./pkg/ui/bindata.go
+	cd web/ui && bash build_ui.sh
+	addlicense -c "SAP SE or an SAP affiliate company" ./web/ui/assets_embed.go ./web/ui/ui.go
 
 install-goimports: FORCE
 	@if ! hash goimports 2>/dev/null; then printf "\e[1;36m>> Installing goimports (this may take a while)...\e[0m\n"; go install golang.org/x/tools/cmd/goimports@latest; fi

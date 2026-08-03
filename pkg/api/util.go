@@ -152,7 +152,26 @@ func ReturnPromError(w http.ResponseWriter, err error, code int) {
 	ReturnJSON(w, code, jsonErr)
 }
 
-func scopeToLabelConstraint(req *http.Request, keystoneDriver keystone.Driver) (string, []string) { //nolint:gocritic
+// scopeToLabelConstraint derives the Prometheus tenant filter (label key + values)
+// for a request, in this precedence order:
+//
+//  1. X-Project-Id header  → project_id filter (+ child projects)
+//  2. X-Domain-Id header   → domain_id filter
+//  3. project_id query param → project_id filter (+ child projects)
+//
+// The two header branches are trusted WITHOUT a membership check because
+// keystone.AuthenticateRequest strips any inbound copies and re-sets them from
+// the validated token — they cannot carry client input. The query-param branch
+// (used by the React UI) IS client-controlled, so it must membership-check the
+// requested project against the user's monitoring-scoped projects before use.
+// If that invariant in AuthenticateRequest is ever removed, branches 1/2 become
+// spoofable. The invariant is guarded across both files by a test pair:
+// keystone.TestAuthenticateRequest (proves inbound scope headers are stripped
+// and re-set from the token) and TestScopeHeaderWinsUnchecked (proves the
+// header branch here resolves unchecked and outranks the query param).
+//
+//nolint:gocritic // ifElseChain: sequential header/param precedence reads clearer than a switch here
+func scopeToLabelConstraint(req *http.Request, keystoneDriver keystone.Driver) (string, []string) {
 	ctx := req.Context()
 	logg.Debug("[SCOPE_DEBUG] Starting scope resolution")
 
@@ -174,8 +193,34 @@ func scopeToLabelConstraint(req *http.Request, keystoneDriver keystone.Driver) (
 
 	// MAIA: fallback — React UI passes project_id as a query param (injected by useAPIQuery).
 	// Read it here so that scope-aware queries work without requiring explicit scope headers.
+	// SECURITY: unlike the X-Project-Id header (set server-side from the validated token),
+	// this value is client-controlled. Verify the authenticated user actually has a
+	// monitoring role on the requested project before trusting it, otherwise any
+	// authenticated user could read another tenant's metrics by supplying a foreign
+	// project_id. X-User-Id is set from the validated token in AuthenticateRequest.
 	if projectID := req.URL.Query().Get("project_id"); projectID != "" {
 		logg.Debug("[SCOPE_DEBUG] Found project_id query param: %s", projectID)
+		userID := req.Header.Get("X-User-Id")
+		scopes, err := keystoneDriver.UserProjects(ctx, userID)
+		if err != nil {
+			logg.Error("[SCOPE_DEBUG] UserProjects failed for user %s: %v", userID, err)
+			panic(err)
+		}
+		// Membership is checked on the exact requested ID (a direct monitoring
+		// role is required); children are then expanded to match the header
+		// branch's semantics above. Range by index to avoid copying each
+		// tokens.Scope (~72 bytes) per iteration.
+		authorized := false
+		for i := range scopes {
+			if scopes[i].ProjectID == projectID {
+				authorized = true
+				break
+			}
+		}
+		if !authorized {
+			logg.Error("[SCOPE_DEBUG] User %s is not a member of requested project %s", userID, projectID)
+			panic(fmt.Errorf("user is not authorized for project %q", projectID))
+		}
 		children, err := keystoneDriver.ChildProjects(ctx, projectID)
 		if err != nil {
 			logg.Error("[SCOPE_DEBUG] ChildProjects failed for %s: %v", projectID, err)
@@ -394,13 +439,17 @@ func setAuthCookies(req *http.Request, w http.ResponseWriter) {
 		SameSite: http.SameSiteLaxMode,
 	})
 	// remember domain as cookie so that reauthentication during Prometheus API calls (no domain prefix)
-	// works with plain username and password
-	http.SetCookie(w, &http.Cookie{
+	// works with plain username and password.
+	// HttpOnly is intentionally false: this carries only a domain name (no
+	// secret), and the React UI reads it via document.cookie to build the
+	// correct /{domain}/graph login redirect on a 401. The token cookie above
+	// stays HttpOnly. Secure + SameSite=Lax remain set.
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec // G124: domain name is not a secret and must be JS-readable for the login redirect; Secure+SameSite still set
 		Name:     userDomainCookieName,
 		Path:     "/",
 		Value:    req.Header.Get(userDomainHeader),
 		MaxAge:   60 * 60 * 24,
-		HttpOnly: true,
+		HttpOnly: false,
 		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
 	})
