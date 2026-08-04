@@ -123,11 +123,27 @@ export const MaiaProjectProvider: FC<PropsWithChildren> = ({ children }) => {
         seen.add(p.id);
         return true;
       });
+      // MAIA: sort alphabetically by name so the switcher lists projects in a
+      // stable, human-scannable order. Keystone returns them roughly by project
+      // ID, which is meaningless to users. localeCompare gives case-insensitive,
+      // locale-aware ordering.
+      unique.sort((a, b) => a.name.localeCompare(b.name));
       setProjects(unique);
 
+      // MAIA: pick the default project. The invariant we want: the checkmarked
+      // project must equal the project the session token is actually scoped into
+      // ("the project you are in stays the one you are in"). Priority:
+      //   1. the project the token is scoped to (whoami) — this is where the
+      //      server has actually placed you, so the checkmark, the query scope
+      //      (api.ts injects currentProject.id), and the classic-UI link all
+      //      agree with your real scope on first load
+      //   2. the project the user last selected (localStorage), if the token is
+      //      unscoped/domain-scoped and still lists it — preserves a manual pick
+      //   3. first project alphabetically, as a last resort
       const savedId = localStorage.getItem(LOCAL_STORAGE_KEY);
       const saved = unique.find((p) => p.id === savedId);
-      setCurrentProject(saved ?? unique[0] ?? null);
+      const scoped = unique.find((p) => p.id === whoami.projectId);
+      setCurrentProject(scoped ?? saved ?? unique[0] ?? null);
       setIsLoading(false);
     }).catch((err) => {
       // Network error / thrown exception in the success path — surface it.
