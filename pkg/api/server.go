@@ -10,10 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
-	"path/filepath"
 	"regexp"
-	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -25,7 +22,6 @@ import (
 
 	"github.com/SAP-cloud-infrastructure/maia/pkg/keystone"
 	"github.com/SAP-cloud-infrastructure/maia/pkg/storage"
-	"github.com/SAP-cloud-infrastructure/maia/pkg/ui"
 	newui "github.com/SAP-cloud-infrastructure/maia/web/ui"
 )
 
@@ -93,12 +89,9 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 	// This prevents race conditions by determining keystone instance once per request
 	mainRouter.Use(keystoneResolutionMiddleware)
 
+	// Root always redirects to the new React UI
 	mainRouter.Methods(http.MethodGet).Path("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if viper.GetBool("maia.new_ui_enabled") {
-			http.Redirect(w, r, "/ui/query", http.StatusFound)
-		} else {
-			redirectToRootPage(w, r)
-		}
+		http.Redirect(w, r, "/ui/query", http.StatusFound)
 	})
 
 	// Readiness probe used by the React UI's ReadinessWrapper
@@ -126,124 +119,47 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 	// maia's federate endpoint
 	mainRouter.Methods(http.MethodGet).Path("/federate").HandlerFunc(
 		authorize(observeDuration(Federate, "federate"), false, "metric:show"))
-	// expression browser
-	mainRouter.Methods(http.MethodGet).PathPrefix("/static/").HandlerFunc(serveStaticContent)
-	mainRouter.Methods(http.MethodGet).PathPrefix("/favicon.ico").HandlerFunc(serveStaticContent)
-	mainRouter.Methods(http.MethodGet).Path("/graph").HandlerFunc(redirectToRootPage)
+	// /graph (no domain) — redirect to new UI
+	mainRouter.Methods(http.MethodGet).Path("/graph").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/ui/query", http.StatusFound)
+	})
 	// scrape endpoint for Prometheus
 	mainRouter.Handle("/metrics", promhttp.Handler())
 
-	// domain-prefixed paths. Order is relevant! This implies that there must be no domain federate, static or graph :-)
-	mainRouter.Methods(http.MethodGet).Path("/{domain}/graph").HandlerFunc(authorize(observeDuration(observeResponseSize(graph, "graph"), "graph"), true, "metric:show"))
-	mainRouter.Methods(http.MethodGet).Path("/{domain}").HandlerFunc(redirectToDomainRootPage)
+	// /{domain}/graph — login stub: authenticate via any supported method
+	// (cookie, Basic Auth, application credentials), set the auth cookie,
+	// then redirect to the React UI. The expression browser is no longer served.
+	mainRouter.Methods(http.MethodGet).Path("/{domain}/graph").HandlerFunc(
+		authorize(loginAndRedirect, true, "metric:show"))
+	// /{domain} — redirect directly to new UI
+	mainRouter.Methods(http.MethodGet).Path("/{domain}").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/ui/query", http.StatusFound)
+	})
 
-	// P2-2/P2-3: new React UI routes, gated by maia.new_ui_enabled
-	if viper.GetBool("maia.new_ui_enabled") {
-		mainRouter.Methods(http.MethodGet).Path("/ui").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, "/ui/query", http.StatusFound)
-		})
-		// Strip /ui/ prefix; MantineUIAssets is rooted at mantine-ui/
-		// so /ui/assets/foo.js → assets/foo.js inside MantineUIAssets
-		uiFileServer := http.StripPrefix("/ui/", http.FileServer(newui.MantineUIAssets))
-		mainRouter.Methods(http.MethodGet).PathPrefix("/ui/assets/").Handler(uiFileServer)
-		mainRouter.Methods(http.MethodGet).Path("/ui/favicon.svg").Handler(uiFileServer)
-		mainRouter.Methods(http.MethodGet).Path("/ui/manifest.json").Handler(uiFileServer)
-		// SPA catch-all: all other /ui/* paths get index.html
-		mainRouter.Methods(http.MethodGet).PathPrefix("/ui/").HandlerFunc(serveReactApp)
-	}
+	// New React UI routes
+	mainRouter.Methods(http.MethodGet).Path("/ui").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/ui/query", http.StatusFound)
+	})
+	// Strip /ui/ prefix; MantineUIAssets is rooted at mantine-ui/
+	// so /ui/assets/foo.js → assets/foo.js inside MantineUIAssets
+	uiFileServer := http.StripPrefix("/ui/", http.FileServer(newui.MantineUIAssets))
+	mainRouter.Methods(http.MethodGet).PathPrefix("/ui/assets/").Handler(uiFileServer)
+	mainRouter.Methods(http.MethodGet).Path("/ui/favicon.svg").Handler(uiFileServer)
+	mainRouter.Methods(http.MethodGet).Path("/ui/manifest.json").Handler(uiFileServer)
+	// SPA catch-all: all other /ui/* paths get index.html
+	mainRouter.Methods(http.MethodGet).PathPrefix("/ui/").HandlerFunc(serveReactApp)
 
 	// provide the inflight metrics for all paths
 	return gaugeInflight(mainRouter)
 }
 
-var validDomain = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
-
-// trueValue is required by golangci-lint when string literals appear 5+ times
-// Alternative would be multiple //nolint:goconst annotations which is messier
-const trueValue = "true"
-
-// redirectToDomainRootPage will redirect users to the UI start page for their domain
-func redirectToDomainRootPage(w http.ResponseWriter, r *http.Request) {
-	domain, ok := mux.Vars(r)["domain"]
-	if !ok || !validDomain.MatchString(domain) {
-		logg.Debug("Invalid domain: %s", domain)
-		redirectToRootPage(w, r)
-		return
-	}
-
-	// Preserve existing query parameters
-	q := r.URL.Query()
-
-	// Check if global flag is set in header but not in query params
-	if r.Header.Get("X-Global-Region") == trueValue && q.Get("global") == "" {
-		q.Set("global", trueValue)
-	}
-
-	// Encode domain to prevent any potential attacks
-	domain = url.PathEscape(domain)
-
-	// Construct redirect URL with preserved query parameters
-	target := "//" + r.Host + "/" + domain + "/graph"
-	if len(q) > 0 {
-		target += "?" + q.Encode()
-	}
-
-	logg.Debug("Redirecting %s to %s", r.URL.Path, target)
-	http.Redirect(w, r, target, http.StatusFound) //nolint:gosec // G710: r.Host is set by the reverse proxy, not user-controlled
-}
-
-// redirectToRootPage will redirect users to the global start page
-func redirectToRootPage(w http.ResponseWriter, r *http.Request) {
-	domain := viper.GetString("keystone.default_user_domain_name")
-	username, _, ok := r.BasicAuth()
-	if ok && strings.Contains(strings.Split(username, "|")[0], "@") {
-		domain = strings.Split(username, "@")[1]
-		logg.Debug("Username contains domain info. Redirecting to domain %s", domain)
-	}
-
-	// Preserve existing query parameters
-	q := r.URL.Query()
-
-	// Check if global flag is set in header but not in query params
-	if r.Header.Get("X-Global-Region") == trueValue && q.Get("global") == "" {
-		q.Set("global", trueValue)
-	}
-
-	// Construct redirect URL with preserved query parameters
-	target := "//" + r.Host + "/" + domain + "/graph"
-	if len(q) > 0 {
-		target += "?" + q.Encode()
-	}
-
-	logg.Debug("Redirecting to %s", target)
-	http.Redirect(w, r, target, http.StatusFound) //nolint:gosec // G710: r.Host is set by the reverse proxy, not user-controlled
-}
-
-// serveStaticContent serves all the static assets of the web UI (pages, js, images)
-func serveStaticContent(w http.ResponseWriter, req *http.Request) {
-	fp := req.URL.Path
-	if fp == "/favicon.ico" {
-		// support favicon web standard
-		fp = filepath.Join("static", "img", fp)
-	}
-	fp = filepath.Join("web", fp)
-
-	info, err := ui.AssetInfo(fp)
-	if err != nil {
-		logg.Info("WARNING: Could not get file info: %v", err)
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-	file, err := ui.Asset(fp)
-	if err != nil {
-		if !errors.Is(err, io.EOF) {
-			logg.Info("WARNING: Could not get file info: %v", err)
-		}
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-
-	http.ServeContent(w, req, info.Name(), info.ModTime(), bytes.NewReader(file))
+// loginAndRedirect is the /{domain}/graph handler after the expression browser
+// is removed. The authorize() wrapper authenticates the request via all
+// supported mechanisms (X-Auth-Token cookie, Basic Auth, application
+// credentials) and sets the auth cookie. This handler then redirects to the
+// new React UI, completing the login flow.
+func loginAndRedirect(w http.ResponseWriter, req *http.Request) {
+	http.Redirect(w, req, "/ui/query", http.StatusFound)
 }
 
 // Federate handles GET /federate.
@@ -302,21 +218,4 @@ func serveReactApp(w http.ResponseWriter, req *http.Request) {
 	if _, err := w.Write(html); err != nil {
 		logg.Error("failed to write React UI response: %v", err)
 	}
-}
-
-// graph returns the Prometheus UI page
-func graph(w http.ResponseWriter, req *http.Request) {
-	// Get keystone from context (secure, race-condition-free approach)
-	ks := getKeystoneFromContext(req.Context())
-	if ks == nil {
-		// Context-based keystone resolution is mandatory for security
-		logg.Error("Missing keystone context in graph - request may have bypassed keystoneResolutionMiddleware")
-		http.Error(w, "Internal server error: keystone context not available", http.StatusInternalServerError)
-		return
-	}
-	// P2-4: pass new UI flag so the template can show the "Try it →" banner
-	data := map[string]any{
-		"newUIEnabled": viper.GetBool("maia.new_ui_enabled"),
-	}
-	ui.ExecuteTemplate(w, req, "graph.html", ks, data)
 }

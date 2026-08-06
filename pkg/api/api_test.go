@@ -683,11 +683,11 @@ func TestServeStaticContent(t *testing.T) {
 
 	router, _, _ := setupTest(t, ctrl)
 
+	// Static content is no longer served — web/static/ was removed in Phase 4.
 	test.APIRequest{
 		Method:           "GET",
 		Path:             "/static/css/graph.css",
-		ExpectStatusCode: http.StatusOK,
-		ExpectFile:       "../../web/static/css/graph.css",
+		ExpectStatusCode: http.StatusNotFound,
 	}.Check(t, router)
 }
 
@@ -707,12 +707,18 @@ func TestGraph(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	router, keystoneMock, _ := setupTest(t, ctrl)
-	expectAuthByDefaults(keystoneMock)
+	// /{domain}/graph is now a login stub: authenticate then redirect to /ui/query (302).
+	// authorize() runs with guessScope=true; the token is project-scoped so UserProjects
+	// is not called. loginAndRedirect does not invoke scopeToLabelConstraint so
+	// ChildProjects is also not called — only AuthenticateRequest fires.
+	httpReqMatcher := test.HTTPRequestMatcher{InjectHeader: projectHeader}
+	keystoneMock.EXPECT().AuthenticateRequest(test.MatchContext(), httpReqMatcher, true).Return(projectContext, nil)
 
 	test.APIRequest{
+		Headers:          map[string]string{"Authorization": base64.StdEncoding.EncodeToString([]byte("Basic user_id|12345:password"))},
 		Method:           "GET",
-		Path:             "/testdomain/graph?project_id=" + projectContext.Auth["project_id"],
-		ExpectStatusCode: http.StatusOK,
+		Path:             "/testdomain/graph",
+		ExpectStatusCode: http.StatusFound,
 	}.Check(t, router)
 }
 
@@ -860,40 +866,32 @@ func TestRedirectPreservesGlobalFlag(t *testing.T) {
 	// Setup router with both keystones
 	router := setupRouter(regularKeystone, globalKeystone, storageMock)
 
-	// Test case: redirect with global param preserves the param
-	t.Run("Redirect preserves global param", func(t *testing.T) {
-		// Create request with global parameter
+	// /graph (no domain) and / now redirect unconditionally to /ui/query.
+	// The global flag is handled by the React UI via query params to /api/v1/*.
+	t.Run("Redirect goes to /ui/query", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/graph?global=true", http.NoBody)
 
-		// Execute request
 		recorder := httptest.NewRecorder()
 		router.ServeHTTP(recorder, req)
 
-		// Check status code
 		resp := recorder.Result()
 		assert.Equal(t, http.StatusFound, resp.StatusCode, "Expected redirect")
 
-		// Check Location header contains global parameter
 		location := resp.Header.Get("Location")
-		assert.Contains(t, location, "global=true", "Redirect should preserve global flag")
+		assert.Equal(t, "/ui/query", location, "Should redirect to /ui/query")
 	})
 
-	// Test case: redirect with global header adds global param
-	t.Run("Redirect with global header", func(t *testing.T) {
-		// Create request with global header
+	t.Run("Redirect with global header goes to /ui/query", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/graph", http.NoBody)
 		req.Header.Set("X-Global-Region", "true")
 
-		// Execute request
 		recorder := httptest.NewRecorder()
 		router.ServeHTTP(recorder, req)
 
-		// Check status code
 		resp := recorder.Result()
 		assert.Equal(t, http.StatusFound, resp.StatusCode, "Expected redirect")
 
-		// Check Location header contains global parameter
 		location := resp.Header.Get("Location")
-		assert.Contains(t, location, "global=true", "Redirect should add global flag from header")
+		assert.Equal(t, "/ui/query", location, "Should redirect to /ui/query")
 	})
 }

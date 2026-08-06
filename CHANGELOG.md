@@ -16,11 +16,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add `GET /api/v1/whoami` endpoint returning caller identity (user, project, domain, roles)
 - Add `GET /api/v1/projects` endpoint returning caller's scoped project list
-- Add modern React UI (Prometheus mantine-ui fork) available at `/ui/` (opt-in via `maia.new_ui_enabled = true`)
-- Add `maia.new_ui_enabled` config flag (default `false`) to gate the new UI; expose via Helm as `maia.newUI.enabled`
-- Add "Try new UI →" banner in classic UI when `maia.new_ui_enabled = true`
+- Add modern React UI (Prometheus mantine-ui fork) now always served at `/ui/`
 - Add go:embed-based asset embedding for the new UI, replacing go-bindata
 - Add sentinel label value for global metric visibility (`maia.label_value_for_global_visibility` config option, disabled by default)
+
+### Changed
+
+- `/{domain}/graph` is now a login-only stub: authenticates via all supported methods (cookie, Basic Auth, application credentials) then redirects to `/ui/query`
+- Root path `/` always redirects to `/ui/query`
+
+### Removed
+
+- Removed: Legacy jQuery/Bootstrap 3 expression browser UI (`web/templates/`, `web/static/`)
+- Removed: go-bindata dependency; assets now embedded via Go `embed.FS`
+- Removed: `maia.new_ui_enabled` feature flag — the new React UI is now always on
 
 ### Security
 

@@ -82,7 +82,4 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-
-	// P2-3: feature flag for the new React UI (default off — opt-in)
-	viper.SetDefault("maia.new_ui_enabled", false)
 }

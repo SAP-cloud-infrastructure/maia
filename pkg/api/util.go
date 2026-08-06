@@ -362,8 +362,9 @@ func authorizeRules(keystoneDriver keystone.Driver, w http.ResponseWriter, req *
 			requestReauthentication(w)
 			http.Error(w, "User switch: please login again", http.StatusUnauthorized)
 		} else {
-			// redirect to the domain that fits the user credentials
-			redirectToDomainRootPage(w, req)
+			// redirect to new UI — domain mismatch is irrelevant now that
+			// the expression browser is gone; credentials are still valid
+			http.Redirect(w, req, "/ui/query", http.StatusFound)
 		}
 		return false
 	}
