@@ -152,6 +152,10 @@ const ExpressionInput: FC<ExpressionInputProps> = ({
           newCompleteStrategy({
             remote: {
               url: pathPrefix,
+              // MAIA: API is always at /api/v1 regardless of the /ui/ path prefix.
+              // Without this, the codemirror client would build URLs as
+              // /ui/api/v1/metadata instead of /api/v1/metadata.
+              apiPrefix: "/api/v1",
               cache: { initialMetricList: metricNames },
             },
           }),
