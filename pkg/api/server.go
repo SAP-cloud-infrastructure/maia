@@ -126,15 +126,16 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 	// scrape endpoint for Prometheus
 	mainRouter.Handle("/metrics", promhttp.Handler())
 
-	// /{domain}/graph — login stub: authenticate via any supported method
-	// (cookie, Basic Auth, application credentials), set the auth cookie,
-	// then redirect to the React UI. The expression browser is no longer served.
+	// /{domain} — login entry point. Authenticates via any supported method
+	// (X-Auth-Token cookie, Basic Auth, application credentials, x-auth-token
+	// query param), sets the auth cookie, then redirects to /ui/query.
+	// This is the Elektra deep-link entry point:
+	//   https://maia.example.com/monsoon3?x-auth-token=<token>
+	// Both /{domain} and /{domain}/graph route here for backwards compatibility.
+	mainRouter.Methods(http.MethodGet).Path("/{domain}").HandlerFunc(
+		authorize(loginAndRedirect, true, "metric:show"))
 	mainRouter.Methods(http.MethodGet).Path("/{domain}/graph").HandlerFunc(
 		authorize(loginAndRedirect, true, "metric:show"))
-	// /{domain} — redirect directly to new UI
-	mainRouter.Methods(http.MethodGet).Path("/{domain}").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/ui/query", http.StatusFound)
-	})
 
 	// New React UI routes
 	mainRouter.Methods(http.MethodGet).Path("/ui").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

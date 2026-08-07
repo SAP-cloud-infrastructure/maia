@@ -725,12 +725,16 @@ func TestGraph(t *testing.T) {
 func TestRoot_redirect(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
-	router, _, _ := setupTest(t, ctrl)
+	router, keystoneMock, _ := setupTest(t, ctrl)
+
+	// /{domain} now requires auth (login entry point) — no credentials → 401
+	keystoneMock.EXPECT().AuthenticateRequest(test.MatchContext(), gomock.Any(), true).
+		Return(nil, keystone.NewAuthenticationError(keystone.StatusMissingCredentials, "no credentials"))
 
 	test.APIRequest{
 		Method:           "GET",
 		Path:             "/" + projectContext.Auth["project_id"],
-		ExpectStatusCode: http.StatusFound,
+		ExpectStatusCode: http.StatusUnauthorized,
 	}.Check(t, router)
 }
 

@@ -97,7 +97,7 @@ export const MaiaProjectProvider: FC<PropsWithChildren> = ({ children }) => {
           // falls back to "Default" when absent OR empty (|| not ??) — an empty
           // domain would produce a protocol-relative "//graph" redirect.
           const domain = getCookie("X-User-Domain-Name") || "Default";
-          window.location.href = `/${encodeURIComponent(domain)}/graph`;
+          window.location.href = `/${encodeURIComponent(domain)}`;
           return;
         }
         // Other error (5xx, network issue) — surface it instead of rendering
