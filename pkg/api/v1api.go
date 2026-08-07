@@ -252,12 +252,100 @@ func (p *v1Provider) Labels(w http.ResponseWriter, req *http.Request) {
 
 func (p *v1Provider) Metadata(w http.ResponseWriter, req *http.Request) {
 	q := req.URL.Query()
-	resp, err := p.storage.Metadata(q.Get("metric"), q.Get("limit"), req.Header.Get("Accept"))
+	metricFilter := q.Get("metric")
+
+	// If a specific metric is requested, proxy directly — the caller already
+	// knows the name; no cross-tenant leak.
+	if metricFilter != "" {
+		resp, err := p.storage.Metadata(metricFilter, q.Get("limit"), req.Header.Get("Accept"))
+		if err != nil {
+			ReturnPromError(w, err, http.StatusServiceUnavailable)
+			return
+		}
+		ReturnResponse(w, resp)
+		return
+	}
+
+	// No metric filter: fetch all metadata from Prometheus, then restrict to
+	// metric names the tenant can actually see (via label/__name__/values which
+	// is already tenant-scoped via scopeToLabelConstraint).
+	ks := getKeystoneFromContext(req.Context())
+	if ks == nil {
+		ReturnPromError(w, errors.New("keystone context not available"), http.StatusInternalServerError)
+		return
+	}
+	labelKey, labelValues := scopeToLabelConstraint(req, ks)
+	query, err := util.AddLabelConstraintToExpression(
+		"count({__name__!=\"\"}) BY (__name__)", labelKey, labelValues)
+	if err != nil {
+		ReturnPromError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	ttl, err := time.ParseDuration(viper.GetString("maia.label_value_ttl"))
+	if err != nil {
+		ReturnPromError(w, errors.New("invalid Maia configuration (maia.label_value_ttl)"), http.StatusInternalServerError)
+		return
+	}
+	start := time.Now().Add(-ttl)
+	end := time.Now()
+	namesResp, err := p.storage.QueryRange(query, start.Format(time.RFC3339), end.Format(time.RFC3339),
+		viper.GetString("maia.label_value_ttl"), "", "application/json")
+	if err != nil {
+		ReturnPromError(w, err, http.StatusBadGateway)
+		return
+	}
+	defer namesResp.Body.Close()
+	buf, err := io.ReadAll(namesResp.Body)
+	if err != nil {
+		ReturnPromError(w, err, http.StatusInternalServerError)
+		return
+	}
+	var qr storage.QueryResponse
+	if err := json.Unmarshal(buf, &qr); err != nil {
+		ReturnPromError(w, err, http.StatusInternalServerError)
+		return
+	}
+	matrix, ok := qr.Data.Value.(model.Matrix)
+	if !ok {
+		ReturnPromError(w, errors.New("unexpected result type from metric name query"), http.StatusInternalServerError)
+		return
+	}
+	allowed := make(map[string]bool, len(matrix))
+	for _, s := range matrix {
+		if n := string(s.Metric[model.MetricNameLabel]); n != "" {
+			allowed[n] = true
+		}
+	}
+
+	// Fetch all metadata from Prometheus (no metric filter, no limit).
+	metaResp, err := p.storage.Metadata("", "", req.Header.Get("Accept"))
 	if err != nil {
 		ReturnPromError(w, err, http.StatusServiceUnavailable)
 		return
 	}
-	ReturnResponse(w, resp)
+	defer metaResp.Body.Close()
+	metaBuf, err := io.ReadAll(metaResp.Body)
+	if err != nil {
+		ReturnPromError(w, err, http.StatusInternalServerError)
+		return
+	}
+	var raw struct {
+		Status string                       `json:"status"`
+		Data   map[string]json.RawMessage   `json:"data"`
+	}
+	if err := json.Unmarshal(metaBuf, &raw); err != nil {
+		ReturnPromError(w, err, http.StatusInternalServerError)
+		return
+	}
+	// Filter: keep only metric names visible to this tenant.
+	filtered := make(map[string]json.RawMessage, len(allowed))
+	for name, meta := range raw.Data {
+		if allowed[name] {
+			filtered[name] = meta
+		}
+	}
+	ReturnJSON(w, http.StatusOK, map[string]any{"status": "success", "data": filtered})
 }
 
 // whoamiResponse is the JSON shape returned by GET /api/v1/whoami.
