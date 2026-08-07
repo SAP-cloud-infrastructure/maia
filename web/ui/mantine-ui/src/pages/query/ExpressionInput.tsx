@@ -151,10 +151,10 @@ const ExpressionInput: FC<ExpressionInputProps> = ({
         completeStrategy: new HistoryCompleteStrategy(
           newCompleteStrategy({
             remote: {
-              url: pathPrefix,
-              // MAIA: API is always at /api/v1 regardless of the /ui/ path prefix.
-              // Without this, the codemirror client would build URLs as
-              // /ui/api/v1/metadata instead of /api/v1/metadata.
+              // MAIA: The codemirror client builds URLs as url + apiPrefix + path.
+              // With url=pathPrefix (/ui) it would produce /ui/api/v1/metadata.
+              // Set url="" so API calls use absolute paths from the server root.
+              url: "",
               apiPrefix: "/api/v1",
               cache: { initialMetricList: metricNames },
             },
