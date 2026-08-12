@@ -331,8 +331,8 @@ func (p *v1Provider) Metadata(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	var raw struct {
-		Status string                       `json:"status"`
-		Data   map[string]json.RawMessage   `json:"data"`
+		Status string                     `json:"status"`
+		Data   map[string]json.RawMessage `json:"data"`
 	}
 	if err := json.Unmarshal(metaBuf, &raw); err != nil {
 		ReturnPromError(w, err, http.StatusInternalServerError)

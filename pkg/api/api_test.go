@@ -79,12 +79,6 @@ func expectAuthWithChildren(keystoneMock *keystone.MockDriver) {
 	keystoneMock.EXPECT().ChildProjects(test.MatchContext(), projectContext.Auth["project_id"]).Return([]string{"67890"}, nil).After(authCall)
 }
 
-func expectAuthByDefaults(keystoneMock *keystone.MockDriver) {
-	httpReqMatcher := test.HTTPRequestMatcher{InjectHeader: projectHeader}
-	authCall := keystoneMock.EXPECT().AuthenticateRequest(test.MatchContext(), httpReqMatcher, true).Return(projectContext, nil)
-	keystoneMock.EXPECT().UserProjects(test.MatchContext(), projectContext.Auth["user_id"]).Return([]tokens.Scope{{ProjectID: projectContext.Auth["project_id"], DomainID: projectContext.Auth["project_domain_id"]}}, nil).After(authCall)
-}
-
 func expectAuthAndFail(keystoneMock *keystone.MockDriver) {
 	httpReqMatcher := test.HTTPRequestMatcher{InjectHeader: projectHeader}
 	keystoneMock.EXPECT().AuthenticateRequest(test.MatchContext(), httpReqMatcher, false).Return(nil, keystone.NewAuthenticationError(keystone.StatusWrongCredentials, "negativetesterror"))
