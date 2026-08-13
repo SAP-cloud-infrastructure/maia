@@ -69,6 +69,19 @@
       "enabled": false
     }
   ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "prometheus/prometheus",
+      "managerFilePatterns": [
+        "/^web/ui/UPSTREAM\\.md$/"
+      ],
+      "matchStrings": [
+        "UPSTREAM_VERSION=(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ]
+    }
+  ],
   "prHourlyLimit": 0,
   "schedule": [
     "before 8am on Friday"
