@@ -31,6 +31,47 @@ SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
 path = [
+  "mise.toml",
+  "web/ui/.gitignore",
+  "web/ui/.nvmrc",
+  "web/ui/embed.go.tmpl",
+]
+SPDX-FileCopyrightText = "SAP SE or an SAP affiliate company"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = [
+  "web/ui/README.md",
+  "web/ui/build_ui.sh",
+  "web/ui/package.json",
+  "web/ui/pnpm-lock.yaml",
+  "web/ui/pnpm-workspace.yaml",
+  "web/ui/mantine-ui/**",
+  "web/ui/module/**",
+]
+SPDX-FileCopyrightText = "The Prometheus Authors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = [
+  "web/ui/mantine-ui/src/components/Accordion/**",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "The Prometheus Authors"
+SPDX-License-Identifier = "MIT AND Apache-2.0"
+
+[[annotations]]
+path = [
+  "web/ui/mantine-ui/src/lib/maiaFetch.ts",
+  "web/ui/mantine-ui/src/context/MaiaProjectContext.tsx",
+  "web/ui/mantine-ui/src/components/MaiaProjectSwitcher.tsx",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "SAP SE or an SAP affiliate company"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = [
   "CLAUDE.md",
   "build/*.txt",
   "build/*.out",

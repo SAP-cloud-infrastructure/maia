@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -40,6 +41,13 @@ func NewV1Handler(keystoneDriver keystone.Driver, storageDriver storage.Driver) 
 
 	// Note: Keystone resolution is handled by keystoneResolutionMiddleware at router level
 	// This eliminates race conditions by ensuring consistent keystone selection throughout request lifecycle
+
+	// identity endpoints (auth only, no policy enforcement)
+	r.Methods(http.MethodGet).Path("/whoami").HandlerFunc(authenticateOnly(p.Whoami))
+	r.Methods(http.MethodGet).Path("/projects").HandlerFunc(authenticateOnly(p.Projects))
+	// metadata requires monitoring role — same as label values to prevent cross-tenant enumeration
+	r.Methods(http.MethodGet).Path("/metadata").HandlerFunc(authorize(p.Metadata, false, "metric:list"))
+	// MAIA: parse_query removed — not available on Thanos query frontends
 
 	// tenant-aware query
 	r.Methods(http.MethodGet).Path("/query").HandlerFunc(authorize(
@@ -238,4 +246,166 @@ func (p *v1Provider) Labels(w http.ResponseWriter, req *http.Request) {
 	}
 
 	ReturnResponse(w, resp)
+}
+
+// MAIA: ParseQuery removed — parse_query endpoint not available on Thanos query frontends
+
+func (p *v1Provider) Metadata(w http.ResponseWriter, req *http.Request) {
+	q := req.URL.Query()
+	metricFilter := q.Get("metric")
+
+	// If a specific metric is requested, proxy directly — the caller already
+	// knows the name; no cross-tenant leak.
+	if metricFilter != "" {
+		resp, err := p.storage.Metadata(metricFilter, q.Get("limit"), req.Header.Get("Accept"))
+		if err != nil {
+			ReturnPromError(w, err, http.StatusServiceUnavailable)
+			return
+		}
+		ReturnResponse(w, resp)
+		return
+	}
+
+	// No metric filter: fetch all metadata from Prometheus, then restrict to
+	// metric names the tenant can actually see (via label/__name__/values which
+	// is already tenant-scoped via scopeToLabelConstraint).
+	ks := getKeystoneFromContext(req.Context())
+	if ks == nil {
+		ReturnPromError(w, errors.New("keystone context not available"), http.StatusInternalServerError)
+		return
+	}
+	labelKey, labelValues := scopeToLabelConstraint(req, ks)
+	query, err := util.AddLabelConstraintToExpression(
+		"count({__name__!=\"\"}) BY (__name__)", labelKey, labelValues)
+	if err != nil {
+		ReturnPromError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	ttl, err := time.ParseDuration(viper.GetString("maia.label_value_ttl"))
+	if err != nil {
+		ReturnPromError(w, errors.New("invalid Maia configuration (maia.label_value_ttl)"), http.StatusInternalServerError)
+		return
+	}
+	start := time.Now().Add(-ttl)
+	end := time.Now()
+	namesResp, err := p.storage.QueryRange(query, start.Format(time.RFC3339), end.Format(time.RFC3339),
+		viper.GetString("maia.label_value_ttl"), "", "application/json")
+	if err != nil {
+		ReturnPromError(w, err, http.StatusBadGateway)
+		return
+	}
+	defer namesResp.Body.Close()
+	buf, err := io.ReadAll(namesResp.Body)
+	if err != nil {
+		ReturnPromError(w, err, http.StatusInternalServerError)
+		return
+	}
+	var qr storage.QueryResponse
+	if err := json.Unmarshal(buf, &qr); err != nil {
+		ReturnPromError(w, err, http.StatusInternalServerError)
+		return
+	}
+	matrix, ok := qr.Data.Value.(model.Matrix)
+	if !ok {
+		ReturnPromError(w, errors.New("unexpected result type from metric name query"), http.StatusInternalServerError)
+		return
+	}
+	allowed := make(map[string]bool, len(matrix))
+	for _, s := range matrix {
+		if n := string(s.Metric[model.MetricNameLabel]); n != "" {
+			allowed[n] = true
+		}
+	}
+
+	// Fetch all metadata from Prometheus (no metric filter, no limit).
+	metaResp, err := p.storage.Metadata("", "", req.Header.Get("Accept"))
+	if err != nil {
+		ReturnPromError(w, err, http.StatusServiceUnavailable)
+		return
+	}
+	defer metaResp.Body.Close()
+	metaBuf, err := io.ReadAll(metaResp.Body)
+	if err != nil {
+		ReturnPromError(w, err, http.StatusInternalServerError)
+		return
+	}
+	var raw struct {
+		Status string                     `json:"status"`
+		Data   map[string]json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(metaBuf, &raw); err != nil {
+		ReturnPromError(w, err, http.StatusInternalServerError)
+		return
+	}
+	// Filter: keep only metric names visible to this tenant.
+	filtered := make(map[string]json.RawMessage, len(allowed))
+	for name, meta := range raw.Data {
+		if allowed[name] {
+			filtered[name] = meta
+		}
+	}
+	ReturnJSON(w, http.StatusOK, map[string]any{"status": "success", "data": filtered})
+}
+
+// whoamiResponse is the JSON shape returned by GET /api/v1/whoami.
+type whoamiResponse struct {
+	UserID         string   `json:"userId"`
+	UserName       string   `json:"userName"`
+	ProjectID      string   `json:"projectId"`
+	ProjectName    string   `json:"projectName"`
+	DomainID       string   `json:"domainId"`
+	DomainName     string   `json:"domainName"`
+	UserDomainName string   `json:"userDomainName"`
+	Roles          []string `json:"roles"`
+}
+
+func (p *v1Provider) Whoami(w http.ResponseWriter, req *http.Request) {
+	h := req.Header
+	rolesRaw := h.Get("X-Roles")
+	roles := []string{}
+	if rolesRaw != "" {
+		for r := range strings.SplitSeq(rolesRaw, ",") {
+			if r = strings.TrimSpace(r); r != "" {
+				roles = append(roles, r)
+			}
+		}
+	}
+	ReturnJSON(w, http.StatusOK, whoamiResponse{
+		UserID:         h.Get("X-User-Id"),
+		UserName:       h.Get("X-User-Name"),
+		ProjectID:      h.Get("X-Project-Id"),
+		ProjectName:    h.Get("X-Project-Name"),
+		DomainID:       h.Get("X-Domain-Id"),
+		DomainName:     h.Get("X-Domain-Name"),
+		UserDomainName: h.Get("X-User-Domain-Name"),
+		Roles:          roles,
+	})
+}
+
+// projectEntry is a single project entry in the GET /api/v1/projects response.
+type projectEntry struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func (p *v1Provider) Projects(w http.ResponseWriter, req *http.Request) {
+	userID := req.Header.Get("X-User-Id")
+	scopes, err := p.keystone.UserProjects(req.Context(), userID)
+	if err != nil {
+		ReturnPromError(w, err, http.StatusInternalServerError)
+		return
+	}
+	// Deduplicate by project ID — a user may have multiple role assignments
+	// on the same project, causing Keystone to return it more than once.
+	seen := map[string]bool{}
+	result := make([]projectEntry, 0, len(scopes))
+	for _, s := range scopes {
+		if seen[s.ProjectID] {
+			continue
+		}
+		seen[s.ProjectID] = true
+		result = append(result, projectEntry{ID: s.ProjectID, Name: s.ProjectName})
+	}
+	ReturnJSON(w, http.StatusOK, result)
 }
