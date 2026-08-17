@@ -5,7 +5,7 @@ ARG IMAGE=golang:1.26.6-alpine3.24
 
 FROM $IMAGE AS builder
 
-RUN apk add --no-cache --no-progress ca-certificates gcc musl-dev git make nodejs npm pnpm bash
+RUN apk add --no-cache --no-progress ca-certificates gcc musl-dev git make nodejs npm bash && npm install -g pnpm@10.33.0
 
 COPY . /src
 ARG BININFO_BUILD_DATE BININFO_COMMIT_HASH BININFO_VERSION # provided to 'make install'
