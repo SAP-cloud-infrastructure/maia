@@ -49,6 +49,15 @@ generate: FORCE
 	cd web/ui && bash build_ui.sh
 	addlicense -c "SAP SE or an SAP affiliate company" ./web/ui/assets_embed.go ./web/ui/ui.go
 
+# check-ui-cves: scan the vendored mantine-ui fork's JS dependency tree for
+# known vulnerabilities. The fork (web/ui/, see web/ui/UPSTREAM.md) is copied
+# source, not a Renovate-tracked dependency, so its npm deps are invisible to
+# the repo's Go-only osvVulnerabilityAlerts. This is the local equivalent of
+# the weekly .github/workflows/osv-scan.yaml. Installs osv-scanner on demand.
+check-ui-cves: FORCE
+	if ! hash osv-scanner 2>/dev/null; then go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest; fi
+	osv-scanner scan --lockfile=web/ui/pnpm-lock.yaml
+
 install-goimports: FORCE
 	@if ! hash goimports 2>/dev/null; then printf "\e[1;36m>> Installing goimports (this may take a while)...\e[0m\n"; go install golang.org/x/tools/cmd/goimports@latest; fi
 
