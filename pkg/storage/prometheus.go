@@ -49,11 +49,14 @@ func (promCli *prometheusStorageClient) init() {
 	}
 
 	if viper.IsSet("maia.proxy") {
-		proxyURL, err := url.Parse(viper.GetString("maia.proxy"))
+		proxyURLString := viper.GetString("maia.proxy")
+		proxyURL, err := url.Parse(proxyURLString)
 		if err != nil {
-			panic(fmt.Errorf("could not set proxy: %s .\n%s", proxyURL, err.Error()))
+			panic(fmt.Errorf("parse proxy URL %q: %w", proxyURLString, err))
 		}
-		promCli.httpClient = &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.Proxy = http.ProxyURL(proxyURL)
+		promCli.httpClient = &http.Client{Transport: transport}
 		return
 	}
 	promCli.httpClient = &http.Client{}
