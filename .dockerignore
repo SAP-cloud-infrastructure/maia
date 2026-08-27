@@ -19,5 +19,6 @@
 /go.work
 /go.work.sum
 /report.html
+/*-report.html
 /shell.nix
 /testing/

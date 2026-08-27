@@ -145,11 +145,8 @@ func NewPrometheusDriver(prometheusAPIURL string, customHeader map[string]string
 	driverName := viper.GetString("maia.storage_driver")
 	switch driverName {
 	case "prometheus":
+		// Prometheus either panics or returns a non-nil driver.
 		driver := Prometheus(prometheusAPIURL, customHeader)
-		if driver == nil {
-			logg.Fatal("Couldn't initialize Prometheus storage driver with given endpoint: \"%s\"", prometheusAPIURL)
-			return nil
-		}
 		logg.Info("Using API server at: \"%s\"", prometheusAPIURL)
 
 		return driver
