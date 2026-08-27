@@ -5,6 +5,8 @@
 [default.extend-words]
 Alue = "Alue"
 ba = "ba"
+ignor = "ignor"
+pn = "pn"
 tabl = "tabl"
 valu = "valu"
 
@@ -13,5 +15,9 @@ valu = "valu"
 extend-exclude = [
   "go.mod",
   "web/static/vendor/",
+  "web/ui/node_modules/",
+  "web/ui/module/",
+  "web/ui/mantine-ui/src/pages/targets/",
+  "web/ui/mantine-ui/src/pages/service-discovery/",
   "docs/*.svg",
 ]

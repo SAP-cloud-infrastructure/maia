@@ -1,0 +1,12 @@
+{
+  "userId": "u12345",
+  "userName": "testuser",
+  "projectId": "12345",
+  "projectName": "testproject",
+  "domainId": "",
+  "domainName": "",
+  "userDomainName": "testdomain",
+  "roles": [
+    "monitoring_viewer"
+  ]
+}

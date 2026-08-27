@@ -9,8 +9,9 @@ SPDX-PackageComment = "The code in this project may include calls to APIs (\"API
 [[annotations]]
 path = [
   ".github/CODEOWNERS",
-  ".github/renovate.json",
+  ".github/renovate.json5",
   ".gitignore",
+  ".hyperspace/pull_request_bot.json",
   ".license-scan-overrides.jsonl",
   ".license-scan-rules.json",
   "build/**/*",
@@ -30,6 +31,48 @@ SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
 path = [
+  "mise.toml",
+  "web/ui/.gitignore",
+  "web/ui/.npmrc",
+  "web/ui/.nvmrc",
+  "web/ui/embed.go.tmpl",
+]
+SPDX-FileCopyrightText = "SAP SE or an SAP affiliate company"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = [
+  "web/ui/README.md",
+  "web/ui/build_ui.sh",
+  "web/ui/package.json",
+  "web/ui/pnpm-lock.yaml",
+  "web/ui/pnpm-workspace.yaml",
+  "web/ui/mantine-ui/**",
+  "web/ui/module/**",
+]
+SPDX-FileCopyrightText = "The Prometheus Authors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = [
+  "web/ui/mantine-ui/src/components/Accordion/**",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "The Prometheus Authors"
+SPDX-License-Identifier = "MIT AND Apache-2.0"
+
+[[annotations]]
+path = [
+  "web/ui/mantine-ui/src/lib/maiaFetch.ts",
+  "web/ui/mantine-ui/src/context/MaiaProjectContext.tsx",
+  "web/ui/mantine-ui/src/components/MaiaProjectSwitcher.tsx",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "SAP SE or an SAP affiliate company"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = [
   "CLAUDE.md",
   "build/*.txt",
   "build/*.out",
@@ -40,21 +83,6 @@ path = [
   "pkg/test/*.json",
   "docs/*.png",
   "docs/*.svg",
-  "web/static/vendor/bootstrap-3.4.1/css/*.css",
-  "web/static/vendor/bootstrap-3.4.1/css/*.map",
-  "web/static/vendor/bootstrap-3.4.1/fonts/*.eot",
-  "web/static/vendor/bootstrap-3.4.1/fonts/*.svg",
-  "web/static/vendor/bootstrap-3.4.1/fonts/*.ttf",
-  "web/static/vendor/bootstrap-3.4.1/fonts/*.woff",
-  "web/static/vendor/bootstrap-3.4.1/fonts/*.woff2",
-  "web/static/vendor/bootstrap-3.4.1/js/*.js",
-  "web/static/vendor/eonasdan-bootstrap-datetimepicker/bootstrap-datetimepicker.min.js",
-  "web/static/vendor/eonasdan-bootstrap-datetimepicker/bootstrap-datetimepicker.min.css",
-  "web/static/vendor/**/*.js",
-  "web/static/js/graph_template.handlebar",
-  "web/static/vendor/rickshaw/*.css",
-  "web/static/img/*.gif",
-  "web/static/img/*.ico",
 ]
 SPDX-FileCopyrightText = "SAP SE or an SAP affiliate company"
 SPDX-License-Identifier = "Apache-2.0"

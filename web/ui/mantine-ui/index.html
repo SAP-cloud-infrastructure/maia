@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!--
+      Placeholders replaced by Maia during serving:
+      - CONSOLES_LINK_PLACEHOLDER: consoles link (unused in Maia, kept for compat)
+      - AGENT_MODE_PLACEHOLDER: always "false" in Maia
+      - READY_PLACEHOLDER: "true" once Maia is up
+      - LOOKBACKDELTA_PLACEHOLDER: lookback delta duration
+    -->
+    <script>
+      const GLOBAL_CONSOLES_LINK='CONSOLES_LINK_PLACEHOLDER';
+      const GLOBAL_AGENT_MODE='AGENT_MODE_PLACEHOLDER';
+      const GLOBAL_READY='READY_PLACEHOLDER';
+      const GLOBAL_LOOKBACKDELTA='LOOKBACKDELTA_PLACEHOLDER';
+    </script>
+
+    <!-- MAIA: TITLE_PLACEHOLDER replaced at serve time by Go handler -->
+    <title>TITLE_PLACEHOLDER</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

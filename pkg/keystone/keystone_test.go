@@ -173,10 +173,29 @@ func TestAuthenticateRequest(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "http://maia.local/federate", http.NoBody)
 	req.SetBasicAuth("testuser@testdomain|testproject@testdomain", "testpw")
+	// A client-supplied X-Roles must not be trusted: AuthenticateRequest should
+	// clear it and replace it with the authenticated roles as a single header.
+	req.Header.Set("X-Roles", "spoofed-admin")
+	// Client-supplied scope headers must not be trusted either: they are the
+	// tenant boundary used downstream by scopeToLabelConstraint. A forged
+	// X-Project-Id / X-Domain-Id must be overwritten/cleared from the validated
+	// token, never allowed to survive (cross-tenant IDOR otherwise).
+	req.Header.Set("X-Project-Id", "victim-project")
+	req.Header.Set("X-Domain-Id", "victim-domain")
 	policyContext, err := ks.AuthenticateRequest(ctx, req, false)
 
 	assert.Nil(t, err, "AuthenticateRequest should not fail")
 	assert.EqualValues(t, []string{"monitoring_viewer"}, policyContext.Roles, "AuthenticateRequest should return the right roles in the context")
+
+	// X-Roles is emitted as a single comma-joined header (consumers split on ","),
+	// and the spoofed client value has been overwritten, not appended to.
+	assert.EqualValues(t, []string{"monitoring_viewer"}, req.Header.Values("X-Roles"), "X-Roles should be a single header carrying only the authenticated roles")
+	assert.Equal(t, "monitoring_viewer", req.Header.Get("X-Roles"), "X-Roles must not retain the client-supplied value")
+
+	// The token is project-scoped (p00001): X-Project-Id must be replaced with the
+	// authenticated project, and the forged X-Domain-Id must be cleared entirely.
+	assert.Equal(t, "p00001", req.Header.Get("X-Project-Id"), "X-Project-Id must be set from the validated token, not the client")
+	assert.Empty(t, req.Header.Get("X-Domain-Id"), "X-Domain-Id must be cleared for a project-scoped token, not retain the client value")
 
 	assertDone(t)
 }
@@ -216,6 +235,45 @@ func TestAuthenticateRequest_token(t *testing.T) {
 	assert.EqualValues(t, []string{"monitoring_viewer"}, policyContext.Roles, "AuthenticateRequest should return the right roles in the context")
 
 	assertDone(t)
+}
+
+func TestAuthenticateRequest_tokenInQueryRemovedFromURL(t *testing.T) {
+	defer gock.Off()
+
+	tests := []struct {
+		name     string
+		rawQuery string
+		wantURL  string
+	}{
+		{
+			name:     "only x-auth-token",
+			rawQuery: "x-auth-token=" + userToken,
+			wantURL:  "",
+		},
+		{
+			name:     "x-auth-token with other params",
+			rawQuery: "match%5B%5D=up&x-auth-token=" + userToken + "&global=true",
+			wantURL:  "global=true&match%5B%5D=up",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ks := setupTest()
+			ctx := t.Context()
+
+			gock.New(baseURL).Get("/v3/auth/tokens").Reply(http.StatusOK).File("fixtures/user_token_validate.json").AddHeader("X-Subject-Token", userToken).AddHeader("Content-Type", "application/json")
+
+			req := httptest.NewRequest(http.MethodGet, "http://maia.local/federate?"+tc.rawQuery, http.NoBody)
+			_, err := ks.AuthenticateRequest(ctx, req, false)
+
+			assert.Nil(t, err, "AuthenticateRequest should not fail")
+			assert.Equal(t, tc.wantURL, req.URL.RawQuery, "x-auth-token should be removed from r.URL.RawQuery")
+			assert.Equal(t, userToken, req.Header.Get("X-Auth-Token"), "token should be relocated to header")
+
+			assertDone(t)
+		})
+	}
 }
 
 func TestAuthenticateRequest_failed(t *testing.T) {

@@ -375,6 +375,18 @@ func (d *keystone) AuthenticateRequest(ctx context.Context, r *http.Request, gue
 	r.Header.Set("X-Application-Credential-Name", policyContext.Auth["application_credential_name"])
 	r.Header.Set("X-Application-Credential-Secret", policyContext.Auth["application_credential_secret"])
 
+	// Strip any client-supplied scope headers first, then set them only from the
+	// validated token claims. Downstream scope resolution (scopeToLabelConstraint)
+	// trusts these headers as the tenant boundary; a forged inbound X-Project-Id on
+	// a domain-scoped token would otherwise survive and leak another tenant's
+	// metrics (the domain branch below sets no project header). Same rationale as
+	// the X-Roles Del below.
+	r.Header.Del("X-Project-Id")
+	r.Header.Del("X-Project-Name")
+	r.Header.Del("X-Project-Domain-Id")
+	r.Header.Del("X-Project-Domain-Name")
+	r.Header.Del("X-Domain-Id")
+	r.Header.Del("X-Domain-Name")
 	if policyContext.Auth["project_id"] != "" {
 		// user is scoped to project
 		r.Header.Set("X-Project-Id", policyContext.Auth["project_id"])
@@ -386,9 +398,14 @@ func (d *keystone) AuthenticateRequest(ctx context.Context, r *http.Request, gue
 		r.Header.Set("X-Domain-Id", policyContext.Auth["domain_id"])
 		r.Header.Set("X-Domain-Name", policyContext.Auth["domain_name"])
 	}
-	// add each role as well (Add will queue up the items passed in)
-	for _, role := range policyContext.Roles {
-		r.Header.Add("X-Roles", role)
+	// Emit roles as a single comma-joined header. Del first so a
+	// client-supplied X-Roles cannot survive and be trusted downstream; the
+	// consumers (Whoami, the authorization error message) split on ",".
+	// Assumes Keystone role names contain no commas (they don't), otherwise a
+	// name would be silently split at the wrong boundary on read.
+	r.Header.Del("X-Roles")
+	if len(policyContext.Roles) > 0 {
+		r.Header.Set("X-Roles", strings.Join(policyContext.Roles, ","))
 	}
 	r.Header.Set("X-Auth-Token", policyContext.Auth["token"])
 	r.Header.Set("X-Auth-Token-Expiry", policyContext.Auth["token-expiry"])
@@ -424,6 +441,7 @@ func (d *keystone) authOptionsFromRequest(ctx context.Context, r *http.Request, 
 		ba.TokenID = token
 		// relocate to header
 		query.Del("x-auth-token")
+		r.URL.RawQuery = query.Encode()
 		r.Header.Set("X-Auth-Token", ba.TokenID)
 	} else if (appCredID != "" && appCredSecret != "") || (appCredName != "" && appCredUserName != "") {
 		ba.ApplicationCredentialID = appCredID

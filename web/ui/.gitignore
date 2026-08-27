@@ -1,0 +1,5 @@
+*.gz
+embed.go
+node_modules/
+dist/
+static/mantine-ui/
