@@ -957,3 +957,37 @@ func TestPostDomainLogin_missingToken(t *testing.T) {
 
 	assert.Equal(t, http.StatusUnauthorized, rec.Result().StatusCode)
 }
+
+func TestPostDomainLogin_bodyTooLarge(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	router, _, _ := setupTest(t, ctrl)
+	// No mock expectation: handler must return 413 before calling AuthenticateRequest.
+
+	// Body exceeds the 16 KB limit.
+	body := strings.NewReader("x-auth-token=" + strings.Repeat("A", 16*1024+1))
+	req := httptest.NewRequest(http.MethodPost, "/testdomain", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, rec.Result().StatusCode)
+}
+
+func TestPostDomainLogin_wrongContentType(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	router, keystoneMock, _ := setupTest(t, ctrl)
+	// Token is in the body but content-type is application/json, so the handler
+	// must NOT extract the token. AuthenticateRequest is called without credentials.
+	keystoneMock.EXPECT().AuthenticateRequest(test.MatchContext(), gomock.Any(), true).
+		Return(nil, keystone.NewAuthenticationError(keystone.StatusMissingCredentials, "no credentials"))
+
+	body := strings.NewReader(`{"x-auth-token":"someverylongtokenindeed"}`)
+	req := httptest.NewRequest(http.MethodPost, "/testdomain", body)
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Result().StatusCode)
+}

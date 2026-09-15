@@ -728,3 +728,41 @@ func TestAuthenticateWithContextualCache(t *testing.T) {
 	t.Log("✓ Authenticate method contextual cache behavior verified")
 	t.Log("✓ Cache isolation prevents authorization context leakage")
 }
+
+// TestAuthOptionsFromRequest_ScrubsQueryTokenWhenHeaderPresent verifies the new
+// behavior introduced by the queryDirty defer pattern: when BOTH X-Auth-Token
+// header and x-auth-token query param are present, the header wins AND the query
+// param is still scrubbed from r.URL.RawQuery so the token does not appear in logs.
+// (Old code only scrubbed the query param when it was actually used for auth.)
+func TestAuthOptionsFromRequest_ScrubsQueryTokenWhenHeaderPresent(t *testing.T) {
+	viper.Set("keystone.auth_url", "http://identity.test/v3")
+	ks := &keystone{}
+
+	req := httptest.NewRequest(http.MethodGet, "/?x-auth-token=querytoken&format=json", http.NoBody)
+	req.Header.Set("X-Auth-Token", "headertoken")
+
+	opts, authErr := ks.authOptionsFromRequest(req.Context(), req, false)
+
+	assert.Nil(t, authErr, "should not return an error")
+	assert.Equal(t, "headertoken", opts.TokenID, "header token must win over query param")
+	assert.NotContains(t, req.URL.RawQuery, "x-auth-token", "query token must be scrubbed even when header wins")
+	assert.Contains(t, req.URL.RawQuery, "format=json", "unrelated query params must be preserved")
+}
+
+// TestAuthOptionsFromRequest_ScrubsQueryTokenOnNormalReturn verifies that when
+// x-auth-token is used via query param, the token is removed from r.URL.RawQuery
+// and promoted to the X-Auth-Token header.
+func TestAuthOptionsFromRequest_ScrubsQueryTokenOnNormalReturn(t *testing.T) {
+	viper.Set("keystone.auth_url", "http://identity.test/v3")
+	ks := &keystone{}
+
+	req := httptest.NewRequest(http.MethodGet, "/?x-auth-token=querytoken&format=json", http.NoBody)
+
+	opts, authErr := ks.authOptionsFromRequest(req.Context(), req, false)
+
+	assert.Nil(t, authErr, "should not return an error")
+	assert.Equal(t, "querytoken", opts.TokenID, "query param token must be used")
+	assert.Equal(t, "querytoken", req.Header.Get("X-Auth-Token"), "token must be promoted to header")
+	assert.NotContains(t, req.URL.RawQuery, "x-auth-token", "query token must be scrubbed")
+	assert.Contains(t, req.URL.RawQuery, "format=json", "unrelated query params must be preserved")
+}
