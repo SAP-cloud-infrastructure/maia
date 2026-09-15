@@ -915,7 +915,7 @@ func TestPostDomainLogin_bodyToken(t *testing.T) {
 
 	resp := rec.Result()
 	assert.Equal(t, http.StatusFound, resp.StatusCode)
-	assert.Equal(t, "/testdomain", resp.Header.Get("Location"))
+	assert.Equal(t, "/ui/query", resp.Header.Get("Location"))
 }
 
 func TestPostDomainLogin_headerTakesPrecedenceOverBody(t *testing.T) {
@@ -939,7 +939,7 @@ func TestPostDomainLogin_headerTakesPrecedenceOverBody(t *testing.T) {
 
 	resp := rec.Result()
 	assert.Equal(t, http.StatusFound, resp.StatusCode)
-	assert.Equal(t, "/testdomain", resp.Header.Get("Location"))
+	assert.Equal(t, "/ui/query", resp.Header.Get("Location"))
 }
 
 func TestPostDomainLogin_missingToken(t *testing.T) {

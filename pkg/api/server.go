@@ -141,12 +141,9 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 	// POST /{domain} — Elektra submits a form POST (application/x-www-form-urlencoded)
 	// with x-auth-token in the body. The token is promoted to X-Auth-Token header
 	// (priority: existing header > body field) before the standard auth+cookie flow runs.
-	// On success, redirects to GET /{domain} (Post-Redirect-Get) so the browser
-	// URL is clean and the token is no longer visible in the address bar.
-	postDomainLogin := authorize(func(w http.ResponseWriter, req *http.Request) {
-		domain := mux.Vars(req)["domain"]
-		http.Redirect(w, req, "/"+domain, http.StatusFound)
-	}, true, "metric:show")
+	// On success, redirects to /ui/query (same as the GET handler) so the browser
+	// URL is clean and the token is not visible in the address bar.
+	postDomainLogin := authorize(loginAndRedirect, true, "metric:show")
 	mainRouter.Methods(http.MethodPost).Path("/{domain}").HandlerFunc(
 		func(w http.ResponseWriter, req *http.Request) {
 			if req.Header.Get("X-Auth-Token") == "" {
