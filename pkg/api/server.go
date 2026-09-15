@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"regexp"
 
@@ -147,8 +148,19 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 	mainRouter.Methods(http.MethodPost).Path("/{domain}").HandlerFunc(
 		func(w http.ResponseWriter, req *http.Request) {
 			if req.Header.Get("X-Auth-Token") == "" {
-				if token := req.PostFormValue("x-auth-token"); token != "" {
-					req.Header.Set("X-Auth-Token", token)
+				mediaType, _, _ := mime.ParseMediaType(req.Header.Get("Content-Type"))
+				if mediaType == "application/x-www-form-urlencoded" {
+					req.Body = http.MaxBytesReader(nil, req.Body, 16*1024)
+					if err := req.ParseForm(); err != nil {
+						var mbe *http.MaxBytesError
+						if errors.As(err, &mbe) {
+							http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+							return
+						}
+						// non-size parse error: fall through to cookie/Basic Auth
+					} else if token := req.PostForm.Get("x-auth-token"); token != "" {
+						req.Header.Set("X-Auth-Token", token)
+					}
 				}
 			}
 			postDomainLogin(w, req)
