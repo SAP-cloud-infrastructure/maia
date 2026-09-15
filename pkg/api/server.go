@@ -148,8 +148,8 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 	mainRouter.Methods(http.MethodPost).Path("/{domain}").HandlerFunc(
 		func(w http.ResponseWriter, req *http.Request) {
 			if req.Header.Get("X-Auth-Token") == "" {
-				mediaType, _, _ := mime.ParseMediaType(req.Header.Get("Content-Type"))
-				if mediaType == "application/x-www-form-urlencoded" {
+				mediaType, _, ctErr := mime.ParseMediaType(req.Header.Get("Content-Type"))
+				if ctErr == nil && mediaType == "application/x-www-form-urlencoded" {
 					req.Body = http.MaxBytesReader(nil, req.Body, 16*1024)
 					if err := req.ParseForm(); err != nil {
 						var mbe *http.MaxBytesError
