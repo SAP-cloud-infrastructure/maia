@@ -433,15 +433,27 @@ func (d *keystone) authOptionsFromRequest(ctx context.Context, r *http.Request, 
 
 	// extract credentials
 	query := r.URL.Query()
+	queryDirty := false
+	defer func() {
+		if queryDirty {
+			r.URL.RawQuery = query.Encode()
+		}
+	}()
+	// Always scrub the query-param token from the URL, regardless of which auth path is
+	// taken. This prevents the token from appearing in access logs even when the header
+	// or app-credential path wins. Defer ensures the scrubbed URL is flushed on early returns.
+	queryToken := query.Get("x-auth-token")
+	if queryToken != "" {
+		logg.Info("DEPRECATION: x-auth-token passed via URL query parameter; use the X-Auth-Token header or POST body instead")
+		query.Del("x-auth-token")
+		queryDirty = true
+	}
 	if token := r.Header.Get("X-Auth-Token"); token != "" {
 		// perfect: we have a token and thus a authorization scope
 		ba.TokenID = token
-	} else if token := query.Get("x-auth-token"); token != "" {
-		// perfect: we have a token and thus a authorization scope (albeit in lower-case)
-		ba.TokenID = token
-		// relocate to header
-		query.Del("x-auth-token")
-		r.URL.RawQuery = query.Encode()
+	} else if queryToken != "" {
+		// relocate to header; already scrubbed from URL above
+		ba.TokenID = queryToken
 		r.Header.Set("X-Auth-Token", ba.TokenID)
 	} else if (appCredID != "" && appCredSecret != "") || (appCredName != "" && appCredUserName != "") {
 		ba.ApplicationCredentialID = appCredID
