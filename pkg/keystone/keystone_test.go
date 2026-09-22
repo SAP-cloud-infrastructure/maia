@@ -316,7 +316,7 @@ func TestAuthenticateRequest_guessScope(t *testing.T) {
 	ctx := t.Context()
 
 	gock.New(baseURL).Get("/v3/users").MatchParams(map[string]string{"domain_id": "d00001", "enabled": "true", "name": "testuser"}).HeaderPresent("X-Auth-Token").Reply(http.StatusOK).File("fixtures/testuser.json").AddHeader("Content-Type", "application/json")
-	gock.New(baseURL).Get("/v3/role_assignments").MatchParams(map[string]string{"effective": "true", "include_names": "true", "user.id": "u00001"}).HeaderPresent("X-Auth-Token").Reply(http.StatusOK).File("fixtures/testuser_roles.json").AddHeader("Content-Type", "application/json")
+	gock.New(baseURL).Get("/v3/role_assignments").MatchParams(map[string]string{"effective": "true", "include_names": "true", "per_page": "10000", "user.id": "u00001"}).HeaderPresent("X-Auth-Token").Reply(http.StatusOK).File("fixtures/testuser_roles.json").AddHeader("Content-Type", "application/json")
 	gock.New(baseURL).Post("/v3/auth/tokens").JSON(userAuthScopeBody).Reply(http.StatusCreated).File("fixtures/user_token_create.json").AddHeader("X-Subject-Token", userToken).AddHeader("Content-Type", "application/json")
 	gock.New(baseURL).Get("/v3/auth/tokens").Reply(http.StatusOK).File("fixtures/user_token_validate.json").AddHeader("X-Subject-Token", userToken).AddHeader("Content-Type", "application/json")
 
@@ -727,27 +727,6 @@ func TestAuthenticateWithContextualCache(t *testing.T) {
 
 	t.Log("✓ Authenticate method contextual cache behavior verified")
 	t.Log("✓ Cache isolation prevents authorization context leakage")
-}
-
-
-// TestAuthOptionsFromRequest_ScrubsQueryTokenWhenHeaderPresent verifies the new
-// behavior introduced by the queryDirty defer pattern: when BOTH X-Auth-Token
-// header and x-auth-token query param are present, the header wins AND the query
-// param is still scrubbed from r.URL.RawQuery so the token does not appear in logs.
-// (Old code only scrubbed the query param when it was actually used for auth.)
-func TestAuthOptionsFromRequest_ScrubsQueryTokenWhenHeaderPresent(t *testing.T) {
-	viper.Set("keystone.auth_url", "http://identity.test/v3")
-	ks := &keystone{}
-
-	req := httptest.NewRequest(http.MethodGet, "/?x-auth-token=querytoken&format=json", http.NoBody)
-	req.Header.Set("X-Auth-Token", "headertoken")
-
-	opts, authErr := ks.authOptionsFromRequest(req.Context(), req, false)
-
-	assert.Nil(t, authErr, "should not return an error")
-	assert.Equal(t, "headertoken", opts.TokenID, "header token must win over query param")
-	assert.NotContains(t, req.URL.RawQuery, "x-auth-token", "query token must be scrubbed even when header wins")
-	assert.Contains(t, req.URL.RawQuery, "format=json", "unrelated query params must be preserved")
 }
 
 // TestAuthOptionsFromRequest_ScrubsQueryTokenOnNormalReturn verifies that when

@@ -777,10 +777,15 @@ func (d *keystone) UserProjects(ctx context.Context, userID string) ([]tokens.Sc
 // fetchUserProjects lists all projects (i.e. scopes) the user may access using Keystone (no cache lookup)
 func (d *keystone) fetchUserProjects(ctx context.Context, userID string) ([]tokens.Scope, error) {
 	scopes := []tokens.Scope{}
-	effectiveVal := true
-	includeNamesVal := true
-	// include_names=true returns project/domain names inline, eliminating N individual GET /v3/projects/<id> calls
-	err := roles.ListAssignments(d.providerClient, roles.ListAssignmentsOpts{UserID: userID, Effective: &effectiveVal, IncludeNames: &includeNamesVal}).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
+	// include_names=true (v3.6+) embeds project/domain names in the response, eliminating N GET /v3/projects/<id>
+	// calls. per_page=10000 requests all assignments in one call, avoiding sequential pagination round-trips
+	// (Keystone's default page size is ~30, so 327 projects would require 11 sequential calls without this).
+	assignmentsURL := d.providerClient.ServiceURL("role_assignments") +
+		"?user.id=" + url.QueryEscape(userID) +
+		"&effective=true&include_names=true&per_page=10000"
+	err := pagination.NewPager(d.providerClient, assignmentsURL, func(r pagination.PageResult) pagination.Page {
+		return roles.RoleAssignmentPage{LinkedPageBase: pagination.LinkedPageBase{PageResult: r}}
+	}).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
 		logg.Debug("loading role assignment page")
 		slice, err := roles.ExtractRoleAssignments(page)
 		if err != nil {
