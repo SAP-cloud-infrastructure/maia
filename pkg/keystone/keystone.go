@@ -790,8 +790,9 @@ func (d *keystone) UserProjects(ctx context.Context, userID string) ([]tokens.Sc
 func (d *keystone) fetchUserProjects(ctx context.Context, userID string) ([]tokens.Scope, error) {
 	scopes := []tokens.Scope{}
 	effectiveVal := true
-	// iterate of all pages returned by the list-role-assignments API call
-	err := roles.ListAssignments(d.providerClient, roles.ListAssignmentsOpts{UserID: userID, Effective: &effectiveVal}).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
+	includeNamesVal := true
+	// include_names=true returns project/domain names inline, eliminating N individual GET /v3/projects/<id> calls
+	err := roles.ListAssignments(d.providerClient, roles.ListAssignmentsOpts{UserID: userID, Effective: &effectiveVal, IncludeNames: &includeNamesVal}).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
 		logg.Debug("loading role assignment page")
 		slice, err := roles.ExtractRoleAssignments(page)
 		if err != nil {
@@ -801,12 +802,12 @@ func (d *keystone) fetchUserProjects(ctx context.Context, userID string) ([]toke
 			if _, ok := d.monitoringRoles[ra.Role.ID]; ok && ra.Scope.Project.ID != "" {
 				scope, ok := d.projectScopeCache.Get(ra.Scope.Project.ID)
 				if !ok {
-					project, err := projects.Get(ctx, d.providerClient, ra.Scope.Project.ID).Extract()
-					if err != nil {
-						return false, err
+					scope = tokens.Scope{
+						ProjectID:   ra.Scope.Project.ID,
+						ProjectName: ra.Scope.Project.Name,
+						DomainID:    ra.Scope.Project.Domain.ID,
+						DomainName:  ra.Scope.Project.Domain.Name,
 					}
-					domainName := d.domainNames[project.DomainID] // this will panic if domains have been added meanwhile --> USE AS A TRIGGER TO RELOAD?
-					scope = tokens.Scope{ProjectID: ra.Scope.Project.ID, ProjectName: project.Name, DomainID: project.DomainID, DomainName: domainName}
 					d.projectScopeCache.Set(ra.Scope.Project.ID, scope, cache.DefaultExpiration)
 				}
 				scopes = append(scopes, scope.(tokens.Scope))

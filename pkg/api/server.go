@@ -153,7 +153,7 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 					req.Body = http.MaxBytesReader(nil, req.Body, 16*1024)
 					if err := req.ParseForm(); err != nil {
 						var mbe *http.MaxBytesError
-						if errors.As(err, &mbe) {
+						if errors.As(err, &mbe) { //nolint:modernize
 							http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
 							return
 						}

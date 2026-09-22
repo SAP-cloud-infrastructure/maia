@@ -1,0 +1,9 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/SAP-cloud-infrastructure/maia/pkg/keystone
+cpu: Apple M5 Pro
+BenchmarkFetchUserProjects/N=10-18         	    6480	    807584 ns/op
+BenchmarkFetchUserProjects/N=50-18         	    1605	   3689032 ns/op
+BenchmarkFetchUserProjects/N=100-18        	     818	   7270523 ns/op
+PASS
+ok  	github.com/SAP-cloud-infrastructure/maia/pkg/keystone	17.929s
