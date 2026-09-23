@@ -174,7 +174,6 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 	// so /ui/assets/foo.js → assets/foo.js inside MantineUIAssets
 	uiFileServer := http.StripPrefix("/ui/", http.FileServer(newui.MantineUIAssets))
 	mainRouter.Methods(http.MethodGet).PathPrefix("/ui/assets/").Handler(uiFileServer)
-	mainRouter.Methods(http.MethodGet).Path("/ui/favicon.svg").Handler(uiFileServer)
 	mainRouter.Methods(http.MethodGet).Path("/ui/manifest.json").Handler(uiFileServer)
 	// SPA catch-all: all other /ui/* paths get index.html
 	mainRouter.Methods(http.MethodGet).PathPrefix("/ui/").HandlerFunc(serveReactApp)
