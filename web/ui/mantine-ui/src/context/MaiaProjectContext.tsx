@@ -12,6 +12,10 @@ import {
 } from "react";
 import { Alert, Button, Center, Loader, Stack } from "@mantine/core";
 import { maiaFetch } from "../lib/maiaFetch";
+// MAIA: resolve the API base and served root from the served path
+// (supports reverse-proxy sub-paths)
+import { apiBase, servedRoot } from "../api/apiBase";
+import { useSettings } from "../state/settingsSlice";
 
 export interface MaiaUser {
   userId: string;
@@ -78,18 +82,30 @@ export const MaiaProjectProvider: FC<PropsWithChildren> = ({ children }) => {
   // empty app. reloadKey bumps to re-run the fetch effect on retry.
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // MAIA: API base resolved from the served path — works standalone (/api/v1)
+  // and behind a reverse proxy under a sub-path (<prefix>/api/v1).
+  const { pathPrefix } = useSettings();
 
   useEffect(() => {
+    // MAIA: base is derived from the served path (apiBase) so these resolve
+    // correctly whether Maia is served at its own root or behind a proxy.
+    const base = apiBase(pathPrefix);
     setIsLoading(true);
     setLoadError(null);
     Promise.all([
-      // MAIA: absolute paths — app is served at /ui/, relative URLs would resolve to /ui/api/v1/...
-      maiaFetch("/api/v1/whoami"),
-      maiaFetch("/api/v1/projects"),
+      maiaFetch(`${base}/whoami`),
+      maiaFetch(`${base}/projects`),
     ]).then(async ([whoamiRes, projectsRes]) => {
       if (!whoamiRes.ok || !projectsRes.ok) {
         const status = !whoamiRes.ok ? whoamiRes.status : projectsRes.status;
         if (status === 401) {
+          if (servedRoot(pathPrefix)) {
+            // A hosting dashboard owns the session when served under a prefix.
+            // Its proxy must not expose Maia's password/token login endpoints.
+            setLoadError("Your session could not be verified. Sign in to the hosting dashboard again, then retry.");
+            setIsLoading(false);
+            return;
+          }
           // No valid session — redirect to the classic UI for login.
           // The classic UI shows a Basic Auth prompt and sets the auth cookie.
           // X-User-Domain-Name is set by the server as a JS-readable (non-HttpOnly)
@@ -151,7 +167,7 @@ export const MaiaProjectProvider: FC<PropsWithChildren> = ({ children }) => {
       setLoadError("Could not reach the server. Check your connection.");
       setIsLoading(false);
     });
-  }, [reloadKey]);
+  }, [reloadKey, pathPrefix]);
 
   const setProject = useCallback((project: MaiaProject) => {
     localStorage.setItem(LOCAL_STORAGE_KEY, project.id);
