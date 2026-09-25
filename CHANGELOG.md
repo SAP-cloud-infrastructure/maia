@@ -19,7 +19,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add modern React UI (Prometheus mantine-ui fork) now always served at `/ui/`
 - Add go:embed-based asset embedding for the new UI, replacing go-bindata
 - Add sentinel label value for global metric visibility (`maia.label_value_for_global_visibility` config option, disabled by default)
-- Add `POST /{domain}` login endpoint: the OpenStack token can now be submitted as an `application/x-www-form-urlencoded` body field (`x-auth-token`), keeping the token out of browser history and server access logs
 
 ### Changed
 
@@ -31,10 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed: Legacy jQuery/Bootstrap 3 expression browser UI (`web/templates/`, `web/static/`)
 - Removed: go-bindata dependency; assets now embedded via Go `embed.FS`
 - Removed: `maia.new_ui_enabled` feature flag — the new React UI is now always on
-
-### Deprecated
-
-- Passing `x-auth-token` as a URL query parameter is deprecated; use the `X-Auth-Token` request header or the `POST /{domain}` body field instead. A warning is now logged server-side on each use.
 
 ### Security
 
