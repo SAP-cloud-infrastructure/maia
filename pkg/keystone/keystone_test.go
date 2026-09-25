@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -315,8 +316,7 @@ func TestAuthenticateRequest_guessScope(t *testing.T) {
 	ctx := t.Context()
 
 	gock.New(baseURL).Get("/v3/users").MatchParams(map[string]string{"domain_id": "d00001", "enabled": "true", "name": "testuser"}).HeaderPresent("X-Auth-Token").Reply(http.StatusOK).File("fixtures/testuser.json").AddHeader("Content-Type", "application/json")
-	gock.New(baseURL).Get("/v3/role_assignments").MatchParams(map[string]string{"effective": "true", "user.id": "u00001"}).HeaderPresent("X-Auth-Token").Reply(http.StatusOK).File("fixtures/testuser_roles.json").AddHeader("Content-Type", "application/json")
-	gock.New(baseURL).Get("/v3/projects/p00001").HeaderPresent("X-Auth-Token").Reply(http.StatusOK).File("fixtures/testproject.json").AddHeader("Content-Type", "application/json")
+	gock.New(baseURL).Get("/v3/role_assignments").MatchParams(map[string]string{"effective": "true", "include_names": "true", "per_page": "10000", "user.id": "u00001"}).HeaderPresent("X-Auth-Token").Reply(http.StatusOK).File("fixtures/testuser_roles.json").AddHeader("Content-Type", "application/json")
 	gock.New(baseURL).Post("/v3/auth/tokens").JSON(userAuthScopeBody).Reply(http.StatusCreated).File("fixtures/user_token_create.json").AddHeader("X-Subject-Token", userToken).AddHeader("Content-Type", "application/json")
 	gock.New(baseURL).Get("/v3/auth/tokens").Reply(http.StatusOK).File("fixtures/user_token_validate.json").AddHeader("X-Subject-Token", userToken).AddHeader("Content-Type", "application/json")
 
@@ -727,4 +727,87 @@ func TestAuthenticateWithContextualCache(t *testing.T) {
 
 	t.Log("✓ Authenticate method contextual cache behavior verified")
 	t.Log("✓ Cache isolation prevents authorization context leakage")
+}
+
+// TestAuthOptionsFromRequest_ScrubsQueryTokenOnNormalReturn verifies that when
+// x-auth-token is used via query param, the token is removed from r.URL.RawQuery
+// and promoted to the X-Auth-Token header.
+func TestAuthOptionsFromRequest_ScrubsQueryTokenOnNormalReturn(t *testing.T) {
+	viper.Set("keystone.auth_url", "http://identity.test/v3")
+	ks := &keystone{}
+
+	req := httptest.NewRequest(http.MethodGet, "/?x-auth-token=querytoken&format=json", http.NoBody)
+
+	opts, authErr := ks.authOptionsFromRequest(req.Context(), req, false)
+
+	assert.Nil(t, authErr, "should not return an error")
+	assert.Equal(t, "querytoken", opts.TokenID, "query param token must be used")
+	assert.Equal(t, "querytoken", req.Header.Get("X-Auth-Token"), "token must be promoted to header")
+	assert.NotContains(t, req.URL.RawQuery, "x-auth-token", "query token must be scrubbed")
+	assert.Contains(t, req.URL.RawQuery, "format=json", "unrelated query params must be preserved")
+}
+
+// buildRoleAssignmentsResponseJSON generates a Keystone role-assignments response
+// with n project-scoped assignments, all for monitoring role r00001.
+func buildRoleAssignmentsResponseJSON(n int) []byte {
+	entries := make([]string, n)
+	for i := range n {
+		entries[i] = fmt.Sprintf(`{"role":{"id":"r00001"},"scope":{"project":{"id":"p%05d"}}}`, i+1)
+	}
+	return []byte(`{"role_assignments":[` + strings.Join(entries, ",") + `]}`)
+}
+
+// BenchmarkFetchUserProjects measures the cold-cache cost of fetchUserProjects
+// across different numbers of project assignments.
+//
+// Before the include_names fix: 1 role-assignments call + N individual
+// GET /v3/projects/<id> calls (sequential, one per project).
+// After the fix: only the role-assignments call; no per-project GETs.
+func BenchmarkFetchUserProjects(b *testing.B) {
+	for _, n := range []int{10, 50, 100} {
+		b.Run(fmt.Sprintf("N=%d", n), func(b *testing.B) {
+			roleAssignmentsBody := buildRoleAssignmentsResponseJSON(n)
+
+			mux := http.NewServeMux()
+			mux.HandleFunc("GET /v3/role_assignments", func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if _, err := w.Write(roleAssignmentsBody); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+				}
+			})
+			// Serve individual project GETs — this handler is exercised by the
+			// current (pre-fix) code path only; post-fix it should never be called.
+			mux.HandleFunc("GET /v3/projects/", func(w http.ResponseWriter, r *http.Request) {
+				id := r.URL.Path[len("/v3/projects/"):]
+				w.Header().Set("Content-Type", "application/json")
+				if _, err := fmt.Fprintf(w, `{"project":{"id":%q,"name":"proj-%s","domain_id":"d00001","enabled":true}}`, id, id); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+				}
+			})
+
+			srv := httptest.NewServer(mux)
+			b.Cleanup(srv.Close)
+
+			svcClient := &gophercloud.ServiceClient{
+				ProviderClient: &gophercloud.ProviderClient{},
+				Endpoint:       srv.URL + "/v3/",
+			}
+			d := &keystone{
+				providerClient:  svcClient,
+				monitoringRoles: map[string]string{"r00001": "monitoring_viewer"},
+				domainNames:     map[string]string{"d00001": "testdomain"},
+			}
+
+			ctx := b.Context()
+			b.ResetTimer()
+			for b.Loop() {
+				// Reset the project scope cache each iteration to simulate a cold-cache hit —
+				// the scenario that triggers the N+1 Keystone calls.
+				d.projectScopeCache = cache.New(24*time.Hour, time.Hour)
+				if _, err := d.fetchUserProjects(ctx, "u00001"); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
 }
