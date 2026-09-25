@@ -624,7 +624,7 @@ func (d *keystone) authenticate(ctx context.Context, authOpts gophercloud.AuthOp
 			return nil, "", NewAuthenticationError(StatusNotAvailable, "%s", err.Error())
 		}
 		// service endpoint
-		endpointURL, err = openstack.V3EndpointURL(catalog, gophercloud.EndpointOpts{Type: "metrics", Availability: gophercloud.AvailabilityPublic})
+		endpointURL, err = openstack.V3Endpoint(ctx, d.providerClient.ProviderClient, catalog, gophercloud.EndpointOpts{Type: "metrics", Availability: gophercloud.AvailabilityPublic})
 		if err != nil {
 			return nil, "", NewAuthenticationError(StatusNotAvailable, "%s", err.Error())
 		}
