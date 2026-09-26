@@ -6,13 +6,11 @@ package keystone
 import (
 	"context"
 	"fmt"
-
 	"net/http"
 	"net/url"
-	"sync"
-
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	policy "github.com/databus23/goslo.policy"
@@ -57,8 +55,6 @@ type keystone struct {
 	serviceURL                                                                      string
 	// role-id --> role-name
 	monitoringRoles map[string]string
-	// domain-id --> domain-name
-	domainNames map[string]string
 	// domain-name --> domain-id
 	domainIDs map[string]string
 	// Configuration section for viper keys
@@ -252,7 +248,6 @@ func (d *keystone) loadDomainsAndRoles(ctx context.Context) {
 	}
 
 	// load domains
-	d.domainNames = map[string]string{}
 	d.domainIDs = map[string]string{}
 	trueVal := true
 	err = projects.List(d.providerClient, projects.ListOpts{IsDomain: &trueVal, Enabled: &trueVal}).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
@@ -261,7 +256,6 @@ func (d *keystone) loadDomainsAndRoles(ctx context.Context) {
 			panic(err)
 		}
 		for _, domain := range domains {
-			d.domainNames[domain.ID] = domain.Name
 			d.domainIDs[domain.Name] = domain.ID
 		}
 		return true, nil
@@ -800,6 +794,12 @@ func (d *keystone) fetchUserProjects(ctx context.Context, userID string) ([]toke
 						ProjectName: ra.Scope.Project.Name,
 						DomainID:    ra.Scope.Project.Domain.ID,
 						DomainName:  ra.Scope.Project.Domain.Name,
+					}
+					if ra.Scope.Project.Name == "" {
+						// include_names=true requires Identity API v3.6+. An empty name here
+						// indicates either a Keystone version mismatch or an API bug; the
+						// scope will be cached with an empty ProjectName for the full TTL.
+						logg.Debug("[KEYSTONE_DEBUG] fetchUserProjects: include_names returned empty name for project %s — check Keystone version (v3.6+ required)", ra.Scope.Project.ID)
 					}
 					d.projectScopeCache.Set(ra.Scope.Project.ID, scope, cache.DefaultExpiration)
 				}

@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Reduce Keystone API calls when listing user projects: use `include_names=true` (Identity API v3.6+) and `per_page=10000` to fetch project names and domains inline, eliminating N+1 `GET /v3/projects/<id>` calls for users with many project assignments
 - `/{domain}/graph` is now a login-only stub: authenticates via all supported methods (cookie, Basic Auth, application credentials) then redirects to `/ui/query`
 - Root path `/` always redirects to `/ui/query`
 
