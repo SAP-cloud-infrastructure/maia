@@ -3,6 +3,9 @@ import { IconAlertTriangle } from "@tabler/icons-react";
 import { useAppDispatch } from "../state/hooks";
 import { updateSettings, useSettings } from "../state/settingsSlice";
 import { useSuspenseAPIQuery } from "../api/api";
+// MAIA: resolve the served deployment root so /-/ready (a server-root endpoint,
+// not under /api/v1) works standalone and behind a reverse-proxy sub-path.
+import { servedRoot } from "../api/apiBase";
 import { WALReplayStatus } from "../api/responseTypes/walreplay";
 import { Progress, Alert, Stack } from "@mantine/core";
 import { useSuspenseQuery } from "@tanstack/react-query";
@@ -27,7 +30,10 @@ const ReadinessLoader: FC = () => {
     gcTime: 0,
     queryFn: async ({ signal }: { signal: AbortSignal }) => {
       try {
-        const res = await fetch(`${pathPrefix}/-/ready`, {
+        // MAIA: /-/ready is a server-root endpoint (not under /api/v1). Resolve
+        // it against the served deployment root so it works standalone and
+        // behind a reverse-proxy sub-path.
+        const res = await fetch(`${servedRoot(pathPrefix)}/-/ready`, {
           cache: "no-store",
           credentials: "same-origin",
           signal,

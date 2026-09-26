@@ -60,6 +60,9 @@ import {
 // MAIA: "Format expression" and "Show/Hide tree view" removed — require
 // /api/v1/format_query and /api/v1/parse_query which are not available on Thanos.
 import { useSettings } from "../../state/settingsSlice";
+// MAIA: resolve the API base from the served path (supports reverse-proxy sub-paths)
+import { completionConfig } from "../../api/completionConfig";
+import { useMaiaProject } from "../../context/MaiaProjectContext";
 import MetricsExplorer from "./MetricsExplorer/MetricsExplorer";
 import ErrorBoundary from "../../components/ErrorBoundary";
 import { useAppSelector } from "../../state/hooks";
@@ -85,6 +88,7 @@ const ExpressionInput: FC<ExpressionInputProps> = ({
   removePanel,
 }) => {
   const theme = useComputedColorScheme();
+  const { currentProject } = useMaiaProject();
   const { queryHistory } = useAppSelector((state) => state.queryPage);
   const {
     pathPrefix,
@@ -112,11 +116,7 @@ const ExpressionInput: FC<ExpressionInputProps> = ({
         completeStrategy: new HistoryCompleteStrategy(
           newCompleteStrategy({
             remote: {
-              // MAIA: The codemirror client builds URLs as url + apiPrefix + path.
-              // With url=pathPrefix (/ui) it would produce /ui/api/v1/metadata.
-              // Set url="" so API calls use absolute paths from the server root.
-              url: "",
-              apiPrefix: "/api/v1",
+              ...completionConfig(pathPrefix, currentProject?.id),
               cache: { initialMetricList: metricNames },
             },
           }),
@@ -125,6 +125,7 @@ const ExpressionInput: FC<ExpressionInputProps> = ({
       });
   }, [
     pathPrefix,
+    currentProject?.id,
     metricNames,
     enableAutocomplete,
     enableLinter,
