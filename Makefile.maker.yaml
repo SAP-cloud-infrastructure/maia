@@ -29,6 +29,12 @@ dockerfile:
 
 golangciLint:
   createConfig: true
+  # errors.AsType[T] (Go 1.27) returns (T, bool); the modernize linter rewrites
+  # the classic errors.As two-step into it, but errcheck does not yet understand
+  # the generic signature and incorrectly reports the discarded first return as an
+  # unchecked error. Exclude it until errcheck catches up with Go 1.27.
+  errcheckExcludes:
+    - errors.AsType
 
 githubWorkflow:
   ci:
@@ -81,6 +87,7 @@ reuse:
     - paths:
       - mise.toml
       - web/ui/.gitignore
+      - web/ui/.npmrc
       - web/ui/.nvmrc
       - web/ui/embed.go.tmpl
       SPDX-FileCopyrightText: SAP SE or an SAP affiliate company
@@ -154,4 +161,3 @@ verbatim: |
   check-ui-cves: FORCE
     if ! hash osv-scanner 2>/dev/null; then go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest; fi
     osv-scanner scan --lockfile=web/ui/pnpm-lock.yaml
-

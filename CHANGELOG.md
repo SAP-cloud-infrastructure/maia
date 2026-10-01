@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The web UI now resolves its API calls relative to the path it is served from, so Maia's UI works both at its own address and when served behind a reverse proxy under a sub-path (no change when served at its own root)
 - `/{domain}/graph` is now a login-only stub: authenticates via all supported methods (cookie, Basic Auth, application credentials) then redirects to `/ui/query`
 - Root path `/` always redirects to `/ui/query`
 

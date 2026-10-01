@@ -3,10 +3,12 @@ import { QueryKey, useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { maiaFetch } from "../lib/maiaFetch";
 // MAIA: inject project_id into every API call
 import { useMaiaProject } from "../context/MaiaProjectContext";
+// MAIA: resolve the API base from the served path (supports reverse-proxy sub-paths)
+import { apiBase, API_PATH } from "./apiBase";
+import { useSettings } from "../state/settingsSlice";
 
-// MAIA: API is always at the server root, not under pathPrefix (/ui/).
-// Using an absolute path prevents /ui/api/v1/... misrouting.
-export const API_PATH = "/api/v1";
+// Re-exported for callers that imported API_PATH from here historically.
+export { API_PATH };
 
 export type SuccessAPIResponse<T> = {
   status: "success";
@@ -25,10 +27,12 @@ export type APIResponse<T> = SuccessAPIResponse<T> | ErrorAPIResponse;
 
 const createQueryFn =
   <T>({
+    apiBasePath,
     path,
     params,
     recordResponseTime,
   }: {
+    apiBasePath: string;
     path: string;
     params?: Record<string, string>;
     recordResponseTime?: (time: number) => void;
@@ -41,10 +45,11 @@ const createQueryFn =
     try {
       const startTime = Date.now();
 
-      // MAIA: API_PATH is absolute (/api/v1) so pathPrefix is intentionally
-      // ignored here — avoids /ui/api/v1/... when app is served under /ui/.
+      // MAIA: apiBasePath is derived from the served path (apiBase()), so the
+      // same bundle works served at Maia's own root (/api/v1) or behind a
+      // reverse proxy under a sub-path (<prefix>/api/v1).
       const res = await maiaFetch(
-        `${API_PATH}${path}${queryString}`,
+        `${apiBasePath}${path}${queryString}`,
         {
           cache: "no-store",
           signal,
@@ -111,6 +116,8 @@ export const useAPIQuery = <T>({
 }: QueryOptions) => {
   // MAIA: inject project_id into every API call
   const { currentProject } = useMaiaProject();
+  // MAIA: resolve API base from the served path
+  const { pathPrefix } = useSettings();
   const maiaParams = currentProject
     ? { ...params, project_id: currentProject.id }
     : params;
@@ -125,13 +132,20 @@ export const useAPIQuery = <T>({
     // that would silently fall back to the Keystone token scope instead of
     // the project the user selected in the switcher.
     enabled: enabled !== false && currentProject !== null,
-    queryFn: createQueryFn({ path, params: maiaParams, recordResponseTime }),
+    queryFn: createQueryFn({
+      apiBasePath: apiBase(pathPrefix),
+      path,
+      params: maiaParams,
+      recordResponseTime,
+    }),
   });
 };
 
 export const useSuspenseAPIQuery = <T>({ key, path, params }: QueryOptions) => {
   // MAIA: inject project_id into every API call
   const { currentProject } = useMaiaProject();
+  // MAIA: resolve API base from the served path
+  const { pathPrefix } = useSettings();
   const maiaParams = currentProject
     ? { ...params, project_id: currentProject.id }
     : params;
@@ -142,6 +156,6 @@ export const useSuspenseAPIQuery = <T>({ key, path, params }: QueryOptions) => {
     refetchOnWindowFocus: false,
     staleTime: Infinity,
     gcTime: 0,
-    queryFn: createQueryFn({ path, params: maiaParams }),
+    queryFn: createQueryFn({ apiBasePath: apiBase(pathPrefix), path, params: maiaParams }),
   });
 };
