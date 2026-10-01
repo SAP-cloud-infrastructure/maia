@@ -1,11 +1,11 @@
 # SPDX-FileCopyrightText: 2025 SAP SE or an SAP affiliate company
 # SPDX-License-Identifier: Apache-2.0
 
-ARG IMAGE=golang:1.26.6-alpine3.24
+ARG IMAGE=golang:1.27.1-alpine3.24
 
 FROM $IMAGE AS builder
 
-RUN apk add --no-cache --no-progress ca-certificates gcc musl-dev git make nodejs npm bash && npm install -g pnpm@10.33.0
+RUN apk add --no-cache --no-progress ca-certificates gcc musl-dev git make nodejs npm bash
 
 COPY . /src
 ARG BININFO_BUILD_DATE BININFO_COMMIT_HASH BININFO_VERSION # provided to 'make install'
@@ -27,7 +27,6 @@ RUN addgroup -g 4200 appgroup \
 
 RUN apk add --no-cache --no-progress git make typos libmagic nodejs npm bash py3-pip \
   # libmagic is required for encoding detection in reuse
-  && npm install -g pnpm@10.33.0 \
   && pip3 install --break-system-packages reuse \
   && make -C /src prepare-static-check
 
