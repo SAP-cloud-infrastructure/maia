@@ -21,17 +21,22 @@ export npm_config_confirm_modules_purge=false
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STATIC_DIR="${SCRIPT_DIR}/static"
 
-# Bootstrap pnpm if it is not already on PATH. The GitHub Actions runner (and a
-# bare `make generate`) only provisions Go, not a JS toolchain, but the Node it
-# ships bundles corepack, which can activate the exact pnpm pinned in
-# web/ui/package.json ("packageManager"). This keeps the runner, Docker, and a
-# laptop all on the same pnpm that wrote pnpm-lock.yaml, so --frozen-lockfile
-# below stays deterministic. Docker still pre-installs pnpm for speed; there
-# this branch is skipped.
+# Bootstrap pnpm if it is not already on PATH, using the exact version pinned in
+# web/ui/package.json ("packageManager") so --frozen-lockfile below stays
+# deterministic. The GitHub Actions runner's Node bundles corepack. Alpine's
+# nodejs package does not, so the Docker build falls back to npm. Do not add
+# Alpine's pnpm package to the image: it tracks pnpm 11, which refuses to
+# switch to the pinned 10.x ("Cannot verify the identity of the
+# @pnpm/exe.linux-x64 native binary").
 if ! command -v pnpm >/dev/null 2>&1; then
-  echo ">> pnpm not found — bootstrapping via corepack"
-  corepack enable
-  corepack prepare --activate
+  if command -v corepack >/dev/null 2>&1; then
+    echo ">> pnpm not found — bootstrapping via corepack"
+    (cd "${SCRIPT_DIR}" && corepack enable && corepack prepare --activate)
+  else
+    pnpm_version="$(sed -n 's/.*"packageManager": *"pnpm@\([^"+]*\).*/\1/p' "${SCRIPT_DIR}/package.json")"
+    echo ">> pnpm not found — installing pnpm@${pnpm_version} via npm"
+    npm install -g "pnpm@${pnpm_version}"
+  fi
 fi
 
 if ! [[ -w $HOME ]]; then
