@@ -126,6 +126,15 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 	// scrape endpoint for Prometheus
 	mainRouter.Handle("/metrics", promhttp.Handler())
 
+	// Prevent /favicon.ico from matching /{domain} and triggering auth cookie
+	// clearing on domain mismatch. Browsers request this path automatically when
+	// there is no <link rel="icon"> in the HTML; without this explicit route,
+	// gorilla/mux routes it to /{domain} with domain="favicon.ico", which causes
+	// the cookie to be cleared for any user whose actual domain is not "favicon.ico".
+	mainRouter.Methods(http.MethodGet).Path("/favicon.ico").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	})
+
 	// /{domain} — login entry point. Authenticates via any supported method
 	// (X-Auth-Token cookie, Basic Auth, application credentials, x-auth-token
 	// query param), sets the auth cookie, then redirects to /ui/query.
