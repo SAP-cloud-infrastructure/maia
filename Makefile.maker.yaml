@@ -24,7 +24,6 @@ dockerfile:
   extraBuildPackages:
     - nodejs
     - npm
-    - pnpm
     - bash
 
 golangciLint:
