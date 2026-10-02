@@ -771,15 +771,11 @@ func (d *keystone) UserProjects(ctx context.Context, userID string) ([]tokens.Sc
 // fetchUserProjects lists all projects (i.e. scopes) the user may access using Keystone (no cache lookup)
 func (d *keystone) fetchUserProjects(ctx context.Context, userID string) ([]tokens.Scope, error) {
 	scopes := []tokens.Scope{}
-	// include_names=true (v3.6+) embeds project/domain names in the response, eliminating N GET /v3/projects/<id>
-	// calls. per_page=10000 requests all assignments in one call, avoiding sequential pagination round-trips
-	// (Keystone's default page size is ~30, so 327 projects would require 11 sequential calls without this).
-	assignmentsURL := d.providerClient.ServiceURL("role_assignments") +
-		"?user.id=" + url.QueryEscape(userID) +
-		"&effective=true&include_names=true&per_page=10000"
-	err := pagination.NewPager(d.providerClient, assignmentsURL, func(r pagination.PageResult) pagination.Page {
-		return roles.RoleAssignmentPage{LinkedPageBase: pagination.LinkedPageBase{PageResult: r}}
-	}).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
+	// include_names=true (Identity API v3.6+) returns project and domain names inline,
+	// so we don't need a GET /v3/projects/<id> per project.
+	trueVal := true
+	opts := roles.ListAssignmentsOpts{UserID: userID, Effective: &trueVal, IncludeNames: &trueVal}
+	err := roles.ListAssignments(d.providerClient, opts).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
 		logg.Debug("loading role assignment page")
 		slice, err := roles.ExtractRoleAssignments(page)
 		if err != nil {
@@ -796,12 +792,12 @@ func (d *keystone) fetchUserProjects(ctx context.Context, userID string) ([]toke
 						DomainName:  ra.Scope.Project.Domain.Name,
 					}
 					if ra.Scope.Project.Name == "" {
-						// include_names=true requires Identity API v3.6+. An empty name here
-						// indicates either a Keystone version mismatch or an API bug; the
-						// scope will be cached with an empty ProjectName for the full TTL.
+						// Keystone did not honor include_names. Use the scope but don't cache it,
+						// so a bad response doesn't stick for the projectScopeCache TTL (24h).
 						logg.Debug("[KEYSTONE_DEBUG] fetchUserProjects: include_names returned empty name for project %s — check Keystone version (v3.6+ required)", ra.Scope.Project.ID)
+					} else {
+						d.projectScopeCache.Set(ra.Scope.Project.ID, scope, cache.DefaultExpiration)
 					}
-					d.projectScopeCache.Set(ra.Scope.Project.ID, scope, cache.DefaultExpiration)
 				}
 				scopes = append(scopes, scope.(tokens.Scope))
 			}

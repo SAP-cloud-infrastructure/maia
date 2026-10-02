@@ -316,7 +316,7 @@ func TestAuthenticateRequest_guessScope(t *testing.T) {
 	ctx := t.Context()
 
 	gock.New(baseURL).Get("/v3/users").MatchParams(map[string]string{"domain_id": "d00001", "enabled": "true", "name": "testuser"}).HeaderPresent("X-Auth-Token").Reply(http.StatusOK).File("fixtures/testuser.json").AddHeader("Content-Type", "application/json")
-	gock.New(baseURL).Get("/v3/role_assignments").MatchParams(map[string]string{"effective": "true", "include_names": "true", "per_page": "10000", "user.id": "u00001"}).HeaderPresent("X-Auth-Token").Reply(http.StatusOK).File("fixtures/testuser_roles.json").AddHeader("Content-Type", "application/json")
+	gock.New(baseURL).Get("/v3/role_assignments").MatchParams(map[string]string{"effective": "true", "include_names": "true", "user.id": "u00001"}).HeaderPresent("X-Auth-Token").Reply(http.StatusOK).File("fixtures/testuser_roles.json").AddHeader("Content-Type", "application/json")
 	gock.New(baseURL).Post("/v3/auth/tokens").JSON(userAuthScopeBody).Reply(http.StatusCreated).File("fixtures/user_token_create.json").AddHeader("X-Subject-Token", userToken).AddHeader("Content-Type", "application/json")
 	gock.New(baseURL).Get("/v3/auth/tokens").Reply(http.StatusOK).File("fixtures/user_token_validate.json").AddHeader("X-Subject-Token", userToken).AddHeader("Content-Type", "application/json")
 
@@ -737,13 +737,7 @@ func TestFetchUserProjects_IncludeNames(t *testing.T) {
 	var perProjectGets int
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /v3/role_assignments", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		body := buildRoleAssignmentsResponseJSON(3)
-		if _, err := w.Write(body); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	})
+	mux.HandleFunc("GET /v3/role_assignments", roleAssignmentsHandler(buildRoleAssignmentsResponseJSON(3)))
 	// Must never be called: include_names=true embeds names inline.
 	mux.HandleFunc("GET /v3/projects/", func(w http.ResponseWriter, r *http.Request) {
 		perProjectGets++
@@ -778,6 +772,52 @@ func TestFetchUserProjects_IncludeNames(t *testing.T) {
 	assert.Zero(t, perProjectGets, "N+1 regression: no GET /v3/projects/<id> calls should be made")
 }
 
+// roleAssignmentsHandler serves body for GET /v3/role_assignments, but only when the
+// request asks for effective assignments with include_names=true. Anything else gets
+// a 400, so fetchUserProjects returns an error if include_names is ever dropped.
+func roleAssignmentsHandler(body []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("include_names") != "true" || q.Get("effective") != "true" || q.Get("user.id") != "u00001" {
+			http.Error(w, "unexpected query: "+r.URL.RawQuery, http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write(body); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
+}
+
+// TestFetchUserProjects_EmptyNameNotCached verifies that a scope without a project
+// name (Keystone ignored include_names) is returned but not put in projectScopeCache.
+func TestFetchUserProjects_EmptyNameNotCached(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v3/role_assignments", roleAssignmentsHandler(
+		[]byte(`{"role_assignments":[{"role":{"id":"r00001"},"scope":{"project":{"id":"p00001"}}}]}`),
+	))
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	d := &keystone{
+		providerClient: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{},
+			Endpoint:       srv.URL + "/v3/",
+		},
+		monitoringRoles:   map[string]string{"r00001": "monitoring_viewer"},
+		projectScopeCache: cache.New(24*time.Hour, time.Hour),
+	}
+
+	scopes, err := d.fetchUserProjects(t.Context(), "u00001")
+
+	assert.NoError(t, err)
+	if assert.Len(t, scopes, 1) {
+		assert.Equal(t, "p00001", scopes[0].ProjectID)
+	}
+	_, cached := d.projectScopeCache.Get("p00001")
+	assert.False(t, cached, "scope with empty project name must not be cached")
+}
+
 // buildRoleAssignmentsResponseJSON generates a Keystone role-assignments response
 // with n project-scoped assignments including name and domain fields, matching
 // what Keystone returns when include_names=true is set (Identity API v3.6+).
@@ -809,12 +849,7 @@ func BenchmarkFetchUserProjects(b *testing.B) {
 			perProjectGets := 0
 
 			mux := http.NewServeMux()
-			mux.HandleFunc("GET /v3/role_assignments", func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				if _, err := w.Write(roleAssignmentsBody); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-				}
-			})
+			mux.HandleFunc("GET /v3/role_assignments", roleAssignmentsHandler(roleAssignmentsBody))
 			// This handler must never be called after the include_names fix.
 			// If it is called, a future change has reintroduced N+1 Keystone calls.
 			mux.HandleFunc("GET /v3/projects/", func(w http.ResponseWriter, r *http.Request) {
