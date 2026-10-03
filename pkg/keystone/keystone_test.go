@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -315,8 +316,7 @@ func TestAuthenticateRequest_guessScope(t *testing.T) {
 	ctx := t.Context()
 
 	gock.New(baseURL).Get("/v3/users").MatchParams(map[string]string{"domain_id": "d00001", "enabled": "true", "name": "testuser"}).HeaderPresent("X-Auth-Token").Reply(http.StatusOK).File("fixtures/testuser.json").AddHeader("Content-Type", "application/json")
-	gock.New(baseURL).Get("/v3/role_assignments").MatchParams(map[string]string{"effective": "true", "user.id": "u00001"}).HeaderPresent("X-Auth-Token").Reply(http.StatusOK).File("fixtures/testuser_roles.json").AddHeader("Content-Type", "application/json")
-	gock.New(baseURL).Get("/v3/projects/p00001").HeaderPresent("X-Auth-Token").Reply(http.StatusOK).File("fixtures/testproject.json").AddHeader("Content-Type", "application/json")
+	gock.New(baseURL).Get("/v3/role_assignments").MatchParams(map[string]string{"effective": "true", "include_names": "true", "user.id": "u00001"}).HeaderPresent("X-Auth-Token").Reply(http.StatusOK).File("fixtures/testuser_roles.json").AddHeader("Content-Type", "application/json")
 	gock.New(baseURL).Post("/v3/auth/tokens").JSON(userAuthScopeBody).Reply(http.StatusCreated).File("fixtures/user_token_create.json").AddHeader("X-Subject-Token", userToken).AddHeader("Content-Type", "application/json")
 	gock.New(baseURL).Get("/v3/auth/tokens").Reply(http.StatusOK).File("fixtures/user_token_validate.json").AddHeader("X-Subject-Token", userToken).AddHeader("Content-Type", "application/json")
 
@@ -727,4 +727,177 @@ func TestAuthenticateWithContextualCache(t *testing.T) {
 
 	t.Log("✓ Authenticate method contextual cache behavior verified")
 	t.Log("✓ Cache isolation prevents authorization context leakage")
+}
+
+// TestFetchUserProjects_IncludeNames verifies that fetchUserProjects populates
+// ProjectName and DomainName from the inline include_names=true response fields
+// and makes no individual GET /v3/projects/<id> calls (N+1 regression guard).
+// This is a regular test (not a benchmark) so it runs on every 'go test' invocation.
+func TestFetchUserProjects_IncludeNames(t *testing.T) {
+	var perProjectGets int
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v3/role_assignments", roleAssignmentsHandler(buildRoleAssignmentsResponseJSON(3)))
+	// Must never be called: include_names=true embeds names inline.
+	mux.HandleFunc("GET /v3/projects/", func(w http.ResponseWriter, r *http.Request) {
+		perProjectGets++
+		id := r.URL.Path[len("/v3/projects/"):]
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := fmt.Fprintf(w, `{"project":{"id":%q,"name":"proj-%s","domain_id":"d00001","enabled":true}}`, id, id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	d := &keystone{
+		providerClient: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{},
+			Endpoint:       srv.URL + "/v3/",
+		},
+		monitoringRoles:   map[string]string{"r00001": "monitoring_viewer"},
+		projectScopeCache: cache.New(24*time.Hour, time.Hour),
+	}
+
+	scopes, err := d.fetchUserProjects(t.Context(), "u00001")
+
+	assert.NoError(t, err)
+	assert.Len(t, scopes, 3, "all three assignments should be returned")
+	for _, s := range scopes {
+		assert.NotEmpty(t, s.ProjectName, "ProjectName must be populated from include_names response")
+		assert.NotEmpty(t, s.DomainName, "DomainName must be populated from include_names response")
+		assert.NotEmpty(t, s.DomainID, "DomainID must be populated from include_names response")
+	}
+	assert.Zero(t, perProjectGets, "N+1 regression: no GET /v3/projects/<id> calls should be made")
+}
+
+// roleAssignmentsHandler serves body for GET /v3/role_assignments, but only when the
+// request asks for effective assignments with include_names=true. Anything else gets
+// a 400, so fetchUserProjects returns an error if include_names is ever dropped.
+func roleAssignmentsHandler(body []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("include_names") != "true" || q.Get("effective") != "true" || q.Get("user.id") != "u00001" {
+			http.Error(w, "unexpected query: "+r.URL.RawQuery, http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write(body); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
+}
+
+// TestFetchUserProjects_EmptyNameNotCached verifies that a scope without a project
+// name (Keystone ignored include_names) is returned but not put in projectScopeCache.
+func TestFetchUserProjects_EmptyNameNotCached(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v3/role_assignments", roleAssignmentsHandler(
+		[]byte(`{"role_assignments":[{"role":{"id":"r00001"},"scope":{"project":{"id":"p00001"}}}]}`),
+	))
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	d := &keystone{
+		providerClient: &gophercloud.ServiceClient{
+			ProviderClient: &gophercloud.ProviderClient{},
+			Endpoint:       srv.URL + "/v3/",
+		},
+		monitoringRoles:   map[string]string{"r00001": "monitoring_viewer"},
+		projectScopeCache: cache.New(24*time.Hour, time.Hour),
+	}
+
+	scopes, err := d.fetchUserProjects(t.Context(), "u00001")
+
+	assert.NoError(t, err)
+	if assert.Len(t, scopes, 1) {
+		assert.Equal(t, "p00001", scopes[0].ProjectID)
+	}
+	_, cached := d.projectScopeCache.Get("p00001")
+	assert.False(t, cached, "scope with empty project name must not be cached")
+}
+
+// buildRoleAssignmentsResponseJSON generates a Keystone role-assignments response
+// with n project-scoped assignments including name and domain fields, matching
+// what Keystone returns when include_names=true is set (Identity API v3.6+).
+func buildRoleAssignmentsResponseJSON(n int) []byte {
+	entries := make([]string, n)
+	for i := range n {
+		id := fmt.Sprintf("p%05d", i+1)
+		entries[i] = fmt.Sprintf(
+			`{"role":{"id":"r00001"},"scope":{"project":{"id":%q,"name":"proj-%s","domain":{"id":"d00001","name":"testdomain"}}}}`,
+			id, id,
+		)
+	}
+	return []byte(`{"role_assignments":[` + strings.Join(entries, ",") + `]}`)
+}
+
+// BenchmarkFetchUserProjects measures the cold-cache cost of fetchUserProjects
+// across different numbers of project assignments.
+//
+// The mock response includes name and domain fields (include_names=true semantics)
+// so the benchmark exercises the real code path. A per-project-GET counter asserts
+// that no individual /v3/projects/<id> calls are made — if a future change
+// reintroduces N+1 calls, the counter check will catch it.
+func BenchmarkFetchUserProjects(b *testing.B) {
+	for _, n := range []int{10, 50, 100} {
+		b.Run(fmt.Sprintf("N=%d", n), func(b *testing.B) {
+			roleAssignmentsBody := buildRoleAssignmentsResponseJSON(n)
+
+			var mu sync.Mutex
+			perProjectGets := 0
+
+			mux := http.NewServeMux()
+			mux.HandleFunc("GET /v3/role_assignments", roleAssignmentsHandler(roleAssignmentsBody))
+			// This handler must never be called after the include_names fix.
+			// If it is called, a future change has reintroduced N+1 Keystone calls.
+			mux.HandleFunc("GET /v3/projects/", func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				perProjectGets++
+				mu.Unlock()
+				id := r.URL.Path[len("/v3/projects/"):]
+				w.Header().Set("Content-Type", "application/json")
+				if _, err := fmt.Fprintf(w, `{"project":{"id":%q,"name":"proj-%s","domain_id":"d00001","enabled":true}}`, id, id); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+				}
+			})
+
+			srv := httptest.NewServer(mux)
+			b.Cleanup(srv.Close)
+
+			svcClient := &gophercloud.ServiceClient{
+				ProviderClient: &gophercloud.ProviderClient{},
+				Endpoint:       srv.URL + "/v3/",
+			}
+			d := &keystone{
+				providerClient:  svcClient,
+				monitoringRoles: map[string]string{"r00001": "monitoring_viewer"},
+			}
+
+			ctx := b.Context()
+			b.ResetTimer()
+			for b.Loop() {
+				// Reset the project scope cache each iteration to simulate a cold-cache hit.
+				d.projectScopeCache = cache.New(24*time.Hour, time.Hour)
+				scopes, err := d.fetchUserProjects(ctx, "u00001")
+				if err != nil {
+					b.Fatal(err)
+				}
+				// Verify names were populated from the inline response (not from separate GETs).
+				if len(scopes) > 0 && scopes[0].ProjectName == "" {
+					b.Fatalf("expected ProjectName to be populated from include_names response, got empty string")
+				}
+			}
+
+			// Assert no per-project GETs were made across all iterations.
+			// A non-zero count means the N+1 regression has been reintroduced.
+			mu.Lock()
+			got := perProjectGets
+			mu.Unlock()
+			if got != 0 {
+				b.Fatalf("N+1 regression detected: %d GET /v3/projects/<id> calls made (expected 0)", got)
+			}
+		})
+	}
 }
