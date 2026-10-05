@@ -600,16 +600,17 @@ func gaugeInflight(handler http.Handler) http.Handler {
 }
 
 func observeDuration(handlerFunc http.HandlerFunc, handler string) http.HandlerFunc {
-	durationSummary := prometheus.NewSummaryVec(
-		prometheus.SummaryOpts{Name: "maia_request_duration_seconds", Help: "Duration/latency of a Maia request", ConstLabels: prometheus.Labels{"handler": handler}}, nil)
-	prometheus.MustRegister(durationSummary)
+	durationHistogram := prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{Name: "maia_request_duration_seconds", Help: "Duration/latency of a Maia request", Buckets: prometheus.DefBuckets, ConstLabels: prometheus.Labels{"handler": handler}}, nil)
+	prometheus.MustRegister(durationHistogram)
 
-	return promhttp.InstrumentHandlerDuration(durationSummary, handlerFunc)
+	return promhttp.InstrumentHandlerDuration(durationHistogram, handlerFunc)
 }
 
 func observeResponseSize(handlerFunc http.HandlerFunc, handler string) http.HandlerFunc {
-	durationSummary := prometheus.NewSummaryVec(prometheus.SummaryOpts{Name: "maia_response_size_bytes", Help: "Size of the Maia response (e.g. to a query)", ConstLabels: prometheus.Labels{"handler": handler}}, nil)
-	prometheus.MustRegister(durationSummary)
+	sizeHistogram := prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{Name: "maia_response_size_bytes", Help: "Size of the Maia response (e.g. to a query)", Buckets: prometheus.ExponentialBuckets(100, 10, 7), ConstLabels: prometheus.Labels{"handler": handler}}, nil)
+	prometheus.MustRegister(sizeHistogram)
 
-	return promhttp.InstrumentHandlerResponseSize(durationSummary, handlerFunc).ServeHTTP
+	return promhttp.InstrumentHandlerResponseSize(sizeHistogram, handlerFunc).ServeHTTP
 }
