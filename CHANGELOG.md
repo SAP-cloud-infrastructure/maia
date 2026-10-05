@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `maia_request_duration_seconds` and `maia_response_size_bytes` are now Histograms instead of Summaries, enabling `histogram_quantile()` queries and multi-replica aggregation. Alert expressions using `{quantile="..."}` labels need to be updated to use `histogram_quantile(0.99, ..._bucket[...])`.
+- Add `maia_requests_total{handler, code, method}` counter for request rate and error rate tracking per handler
+- Add `maia_keystone_cache_hits_total{cache}` and `maia_keystone_cache_misses_total{cache}` counters for token, project tree, user projects, user ID and project scope caches
+- The web UI now resolves its API calls relative to the path it is served from, so Maia's UI works both at its own address and when served behind a reverse proxy under a sub-path (no change when served at its own root)
 - `/{domain}/graph` is now a login-only stub: authenticates via all supported methods (cookie, Basic Auth, application credentials) then redirects to `/ui/query`
 - Root path `/` always redirects to `/ui/query`
 

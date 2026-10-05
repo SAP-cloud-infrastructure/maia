@@ -69,9 +69,12 @@ var authFailuresCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Name: "maia_logon_failures_count", Help: "Number of logon attempts failed due to wrong credentials"})
 var promErrorsCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Name: "maia_tsdb_errors_count", Help: "Number of technical errors occurred when accessing Maia's underlying TSDB (i.e. Prometheus)"})
+var requestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Name: "maia_requests_total", Help: "Total number of HTTP requests handled by Maia, by handler, HTTP method and response code"},
+	[]string{"handler", "code", "method"})
 
 func init() {
-	prometheus.MustRegister(authErrorsCounter, authFailuresCounter, promErrorsCounter)
+	prometheus.MustRegister(authErrorsCounter, authFailuresCounter, promErrorsCounter, requestsTotal)
 }
 
 // provides version data
@@ -599,17 +602,23 @@ func gaugeInflight(handler http.Handler) http.Handler {
 	return promhttp.InstrumentHandlerInFlight(inflightGauge, handler)
 }
 
-func observeDuration(handlerFunc http.HandlerFunc, handler string) http.HandlerFunc {
-	durationSummary := prometheus.NewSummaryVec(
-		prometheus.SummaryOpts{Name: "maia_request_duration_seconds", Help: "Duration/latency of a Maia request", ConstLabels: prometheus.Labels{"handler": handler}}, nil)
-	prometheus.MustRegister(durationSummary)
+func countRequests(handlerFunc http.HandlerFunc, handler string) http.HandlerFunc {
+	curried := requestsTotal.MustCurryWith(prometheus.Labels{"handler": handler})
+	return promhttp.InstrumentHandlerCounter(curried, handlerFunc)
+}
 
-	return promhttp.InstrumentHandlerDuration(durationSummary, handlerFunc)
+func observeDuration(handlerFunc http.HandlerFunc, handler string) http.HandlerFunc {
+	durationHistogram := prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{Name: "maia_request_duration_seconds", Help: "Duration/latency of a Maia request", Buckets: prometheus.DefBuckets, ConstLabels: prometheus.Labels{"handler": handler}}, nil)
+	prometheus.MustRegister(durationHistogram)
+
+	return promhttp.InstrumentHandlerDuration(durationHistogram, handlerFunc)
 }
 
 func observeResponseSize(handlerFunc http.HandlerFunc, handler string) http.HandlerFunc {
-	durationSummary := prometheus.NewSummaryVec(prometheus.SummaryOpts{Name: "maia_response_size_bytes", Help: "Size of the Maia response (e.g. to a query)", ConstLabels: prometheus.Labels{"handler": handler}}, nil)
-	prometheus.MustRegister(durationSummary)
+	sizeHistogram := prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{Name: "maia_response_size_bytes", Help: "Size of the Maia response (e.g. to a query)", Buckets: prometheus.ExponentialBuckets(100, 10, 7), ConstLabels: prometheus.Labels{"handler": handler}}, nil)
+	prometheus.MustRegister(sizeHistogram)
 
-	return promhttp.InstrumentHandlerResponseSize(durationSummary, handlerFunc).ServeHTTP
+	return promhttp.InstrumentHandlerResponseSize(sizeHistogram, handlerFunc).ServeHTTP
 }

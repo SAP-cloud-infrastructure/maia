@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime"
 	"net/http"
 	"regexp"
 
@@ -119,7 +118,7 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 	// other endpoints
 	// maia's federate endpoint
 	mainRouter.Methods(http.MethodGet).Path("/federate").HandlerFunc(
-		authorize(observeDuration(Federate, "federate"), false, "metric:show"))
+		authorize(observeDuration(countRequests(Federate, "federate"), "federate"), false, "metric:show"))
 	// /graph (no domain) — redirect to new UI
 	mainRouter.Methods(http.MethodGet).Path("/graph").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/ui/query", http.StatusFound)
@@ -127,44 +126,25 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 	// scrape endpoint for Prometheus
 	mainRouter.Handle("/metrics", promhttp.Handler())
 
+	// Prevent /favicon.ico from matching /{domain} and triggering auth cookie
+	// clearing on domain mismatch. Browsers request this path automatically when
+	// there is no <link rel="icon"> in the HTML; without this explicit route,
+	// gorilla/mux routes it to /{domain} with domain="favicon.ico", which causes
+	// the cookie to be cleared for any user whose actual domain is not "favicon.ico".
+	mainRouter.Methods(http.MethodGet).Path("/favicon.ico").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	})
+
 	// /{domain} — login entry point. Authenticates via any supported method
 	// (X-Auth-Token cookie, Basic Auth, application credentials, x-auth-token
-	// query param, or POST body field), sets the auth cookie, then redirects.
-	// Supported entry points:
-	//   GET  /{domain}?x-auth-token=<token>  — Elektra deep-link (existing)
-	//   POST /{domain}  body: x-auth-token=<token>  — Elektra form POST (new)
+	// query param), sets the auth cookie, then redirects to /ui/query.
+	// This is the Elektra deep-link entry point:
+	//   https://maia.example.com/monsoon3?x-auth-token=<token>
 	// Both /{domain} and /{domain}/graph route here for backwards compatibility.
 	mainRouter.Methods(http.MethodGet).Path("/{domain}").HandlerFunc(
 		authorize(loginAndRedirect, true, "metric:show"))
 	mainRouter.Methods(http.MethodGet).Path("/{domain}/graph").HandlerFunc(
 		authorize(loginAndRedirect, true, "metric:show"))
-
-	// POST /{domain} — Elektra submits a form POST (application/x-www-form-urlencoded)
-	// with x-auth-token in the body. The token is promoted to X-Auth-Token header
-	// (priority: existing header > body field) before the standard auth+cookie flow runs.
-	// On success, redirects to /ui/query (same as the GET handler) so the browser
-	// URL is clean and the token is not visible in the address bar.
-	postDomainLogin := authorize(loginAndRedirect, true, "metric:show")
-	mainRouter.Methods(http.MethodPost).Path("/{domain}").HandlerFunc(
-		func(w http.ResponseWriter, req *http.Request) {
-			if req.Header.Get("X-Auth-Token") == "" {
-				mediaType, _, ctErr := mime.ParseMediaType(req.Header.Get("Content-Type"))
-				if ctErr == nil && mediaType == "application/x-www-form-urlencoded" {
-					req.Body = http.MaxBytesReader(nil, req.Body, 16*1024)
-					if err := req.ParseForm(); err != nil {
-						var mbe *http.MaxBytesError
-						if errors.As(err, &mbe) { //nolint:modernize
-							http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
-							return
-						}
-						// non-size parse error: fall through to cookie/Basic Auth
-					} else if token := req.PostForm.Get("x-auth-token"); token != "" {
-						req.Header.Set("X-Auth-Token", token)
-					}
-				}
-			}
-			postDomainLogin(w, req)
-		})
 
 	// New React UI routes
 	mainRouter.Methods(http.MethodGet).Path("/ui").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

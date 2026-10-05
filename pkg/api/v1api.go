@@ -51,20 +51,20 @@ func NewV1Handler(keystoneDriver keystone.Driver, storageDriver storage.Driver) 
 
 	// tenant-aware query
 	r.Methods(http.MethodGet).Path("/query").HandlerFunc(authorize(
-		observeDuration(observeResponseSize(p.Query, "query"), "query"),
+		observeDuration(countRequests(observeResponseSize(p.Query, "query"), "query"), "query"),
 		false,
 		"metric:show"))
 	// tenant-aware query range
 	r.Methods(http.MethodGet).Path("/query_range").HandlerFunc(authorize(
-		observeDuration(observeResponseSize(p.QueryRange, "query_range"), "query_range"),
+		observeDuration(countRequests(observeResponseSize(p.QueryRange, "query_range"), "query_range"), "query_range"),
 		false,
 		"metric:show"))
 	// tenant-aware label value lists
-	r.Methods(http.MethodGet).Path("/label/{name}/values").HandlerFunc(authorize(observeDuration(observeResponseSize(p.LabelValues, "label_values"), "label_values"), false, "metric:list"))
+	r.Methods(http.MethodGet).Path("/label/{name}/values").HandlerFunc(authorize(observeDuration(countRequests(observeResponseSize(p.LabelValues, "label_values"), "label_values"), "label_values"), false, "metric:list"))
 	// tenant-aware label name lists
-	r.Methods(http.MethodGet).Path("/labels").HandlerFunc(authorize(observeDuration(observeResponseSize(p.Labels, "labels"), "labels"), false, "metric:list"))
+	r.Methods(http.MethodGet).Path("/labels").HandlerFunc(authorize(observeDuration(countRequests(observeResponseSize(p.Labels, "labels"), "labels"), "labels"), false, "metric:list"))
 	// tenant-aware series metadata
-	r.Methods(http.MethodGet).Path("/series").HandlerFunc(authorize(observeDuration(observeResponseSize(p.Series, "series"), "series"), false, "metric:list"))
+	r.Methods(http.MethodGet).Path("/series").HandlerFunc(authorize(observeDuration(countRequests(observeResponseSize(p.Series, "series"), "series"), "series"), false, "metric:list"))
 
 	return r
 }

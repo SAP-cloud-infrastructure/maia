@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"errors"
@@ -15,6 +14,7 @@ import (
 	policy "github.com/databus23/goslo.policy"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/tokens"
 	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
@@ -895,99 +895,58 @@ func TestRedirectPreservesGlobalFlag(t *testing.T) {
 	})
 }
 
-func TestPostDomainLogin_bodyToken(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	router, keystoneMock, _ := setupTest(t, ctrl)
-
-	// Expect the body token to be promoted to X-Auth-Token header before auth.
-	matcher := test.HTTPRequestMatcher{
-		ExpectHeader: map[string]string{"X-Auth-Token": "someverylongtokenindeed"},
-		InjectHeader: projectHeader,
+// sumRequestsTotal collects maia_requests_total directly from the collector and
+// sums all samples for the given handler, independent of any registry.
+func sumRequestsTotal(handler string) float64 {
+	ch := make(chan prometheus.Metric, 256)
+	requestsTotal.Collect(ch)
+	close(ch)
+	var sum float64
+	for m := range ch {
+		var dm dto.Metric
+		if m.Write(&dm) != nil {
+			continue
+		}
+		for _, lp := range dm.Label {
+			if lp.GetName() == "handler" && lp.GetValue() == handler {
+				sum += dm.Counter.GetValue()
+			}
+		}
 	}
-	keystoneMock.EXPECT().AuthenticateRequest(test.MatchContext(), matcher, true).Return(projectContext, nil)
-
-	body := strings.NewReader("x-auth-token=someverylongtokenindeed")
-	req := httptest.NewRequest(http.MethodPost, "/testdomain", body)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	resp := rec.Result()
-	assert.Equal(t, http.StatusFound, resp.StatusCode)
-	assert.Equal(t, "/ui/query", resp.Header.Get("Location"))
+	return sum
 }
 
-func TestPostDomainLogin_headerTakesPrecedenceOverBody(t *testing.T) {
+func TestRequestMetrics(t *testing.T) {
 	ctrl := gomock.NewController(t)
-	router, keystoneMock, _ := setupTest(t, ctrl)
 
-	// Header token must win; body token must be ignored.
-	matcher := test.HTTPRequestMatcher{
-		ExpectHeader: map[string]string{"X-Auth-Token": "headertoken"},
-		InjectHeader: projectHeader,
+	router, keystoneMock, storageMock := setupTest(t, ctrl)
+	gatherer, ok := prometheus.DefaultRegisterer.(prometheus.Gatherer)
+	assert.True(t, ok, "DefaultRegisterer should also be a Gatherer")
+
+	expectAuthWithChildren(keystoneMock)
+	storageMock.EXPECT().Series([]string{"{component!=\"\",project_id=~\"12345|67890\"}"}, "2017-07-01T20:10:30.781Z", "2017-07-02T04:00:00.000Z", storage.JSON).Return(test.HTTPResponseFromFile("fixtures/series.json"), nil)
+
+	before := sumRequestsTotal("series")
+
+	test.APIRequest{
+		Headers:          map[string]string{"X-Auth-Token": "someverylongtokenideed", "Accept": storage.JSON},
+		Method:           "GET",
+		Path:             "/api/v1/series?match[]={component!=%22%22}&end=2017-07-02T04:00:00.000Z&start=2017-07-01T20:10:30.781Z",
+		ExpectStatusCode: http.StatusOK,
+		ExpectJSON:       "fixtures/series.json",
+	}.Check(t, router)
+
+	// maia_requests_total{handler="series"} must increment by exactly one
+	assert.Equal(t, before+1, sumRequestsTotal("series"), "maia_requests_total should increment for the series handler")
+
+	// Guard the Summary->Histogram fix: these must be histograms (expose _bucket),
+	// not summaries (which never emitted the quantile series the alert queried).
+	mfs, err := gatherer.Gather()
+	assert.NoError(t, err)
+	seen := map[string]dto.MetricType{}
+	for _, mf := range mfs {
+		seen[mf.GetName()] = mf.GetType()
 	}
-	keystoneMock.EXPECT().AuthenticateRequest(test.MatchContext(), matcher, true).Return(projectContext, nil)
-
-	body := strings.NewReader("x-auth-token=bodytoken")
-	req := httptest.NewRequest(http.MethodPost, "/testdomain", body)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("X-Auth-Token", "headertoken")
-
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	resp := rec.Result()
-	assert.Equal(t, http.StatusFound, resp.StatusCode)
-	assert.Equal(t, "/ui/query", resp.Header.Get("Location"))
-}
-
-func TestPostDomainLogin_missingToken(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	router, keystoneMock, _ := setupTest(t, ctrl)
-
-	keystoneMock.EXPECT().AuthenticateRequest(test.MatchContext(), gomock.Any(), true).
-		Return(nil, keystone.NewAuthenticationError(keystone.StatusMissingCredentials, "no credentials"))
-
-	req := httptest.NewRequest(http.MethodPost, "/testdomain", http.NoBody)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusUnauthorized, rec.Result().StatusCode)
-}
-
-func TestPostDomainLogin_bodyTooLarge(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	router, _, _ := setupTest(t, ctrl)
-	// No mock expectation: handler must return 413 before calling AuthenticateRequest.
-
-	// Body exceeds the 16 KB limit.
-	body := strings.NewReader("x-auth-token=" + strings.Repeat("A", 16*1024+1))
-	req := httptest.NewRequest(http.MethodPost, "/testdomain", body)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusRequestEntityTooLarge, rec.Result().StatusCode)
-}
-
-func TestPostDomainLogin_wrongContentType(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	router, keystoneMock, _ := setupTest(t, ctrl)
-	// Token is in the body but content-type is application/json, so the handler
-	// must NOT extract the token. AuthenticateRequest is called without credentials.
-	keystoneMock.EXPECT().AuthenticateRequest(test.MatchContext(), gomock.Any(), true).
-		Return(nil, keystone.NewAuthenticationError(keystone.StatusMissingCredentials, "no credentials"))
-
-	body := strings.NewReader(`{"x-auth-token":"someverylongtokenindeed"}`)
-	req := httptest.NewRequest(http.MethodPost, "/testdomain", body)
-	req.Header.Set("Content-Type", "application/json")
-
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusUnauthorized, rec.Result().StatusCode)
+	assert.Equal(t, dto.MetricType_HISTOGRAM, seen["maia_request_duration_seconds"], "maia_request_duration_seconds must be a Histogram")
+	assert.Equal(t, dto.MetricType_HISTOGRAM, seen["maia_response_size_bytes"], "maia_response_size_bytes must be a Histogram")
 }
