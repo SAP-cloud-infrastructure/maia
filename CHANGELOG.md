@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add modern React UI (Prometheus mantine-ui fork) now always served at `/ui/`
 - Add go:embed-based asset embedding for the new UI, replacing go-bindata
 - Add sentinel label value for global metric visibility (`maia.label_value_for_global_visibility` config option, disabled by default)
+- Add `maia_requests_total{handler, code, method}` counter for request rate and error rate tracking per handler
+- Add `maia_keystone_cache_hits_total{cache}` and `maia_keystone_cache_misses_total{cache}` counters for token, project tree, user projects, user ID and project scope caches
 
 ### Changed
 

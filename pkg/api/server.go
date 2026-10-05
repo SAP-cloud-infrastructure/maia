@@ -118,7 +118,7 @@ func setupRouter(keystoneDriver, globalKeystoneDriver keystone.Driver, storageDr
 	// other endpoints
 	// maia's federate endpoint
 	mainRouter.Methods(http.MethodGet).Path("/federate").HandlerFunc(
-		authorize(observeDuration(Federate, "federate"), false, "metric:show"))
+		authorize(observeDuration(countRequests(Federate, "federate"), "federate"), false, "metric:show"))
 	// /graph (no domain) — redirect to new UI
 	mainRouter.Methods(http.MethodGet).Path("/graph").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/ui/query", http.StatusFound)

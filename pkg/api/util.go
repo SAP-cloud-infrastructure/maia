@@ -69,9 +69,12 @@ var authFailuresCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Name: "maia_logon_failures_count", Help: "Number of logon attempts failed due to wrong credentials"})
 var promErrorsCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Name: "maia_tsdb_errors_count", Help: "Number of technical errors occurred when accessing Maia's underlying TSDB (i.e. Prometheus)"})
+var requestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+	Name: "maia_requests_total", Help: "Total number of HTTP requests handled by Maia, by handler, HTTP method and response code"},
+	[]string{"handler", "code", "method"})
 
 func init() {
-	prometheus.MustRegister(authErrorsCounter, authFailuresCounter, promErrorsCounter)
+	prometheus.MustRegister(authErrorsCounter, authFailuresCounter, promErrorsCounter, requestsTotal)
 }
 
 // provides version data
@@ -597,6 +600,11 @@ func gaugeInflight(handler http.Handler) http.Handler {
 	prometheus.MustRegister(inflightGauge)
 
 	return promhttp.InstrumentHandlerInFlight(inflightGauge, handler)
+}
+
+func countRequests(handlerFunc http.HandlerFunc, handler string) http.HandlerFunc {
+	curried := requestsTotal.MustCurryWith(prometheus.Labels{"handler": handler})
+	return promhttp.InstrumentHandlerCounter(curried, handlerFunc)
 }
 
 func observeDuration(handlerFunc http.HandlerFunc, handler string) http.HandlerFunc {
