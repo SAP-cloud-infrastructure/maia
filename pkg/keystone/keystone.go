@@ -587,7 +587,6 @@ func (d *keystone) authenticate(ctx context.Context, authOpts gophercloud.AuthOp
 		} else {
 			logg.Debug("[%s-keystone] Token cache hit: user %s%s and password ***** for scope %+v", keystoneContext, authOpts.Username, authOpts.UserID, authOpts.Scope)
 		}
-		keystoneCacheHits.WithLabelValues("token").Inc()
 		return entry.(*cacheEntry).context, entry.(*cacheEntry).endpointURL, nil
 	}
 	keystoneCacheMisses.WithLabelValues("token").Inc()
