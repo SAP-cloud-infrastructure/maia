@@ -587,6 +587,7 @@ func (d *keystone) authenticate(ctx context.Context, authOpts gophercloud.AuthOp
 		} else {
 			logg.Debug("[%s-keystone] Token cache hit: user %s%s and password ***** for scope %+v", keystoneContext, authOpts.Username, authOpts.UserID, authOpts.Scope)
 		}
+		keystoneCacheHits.WithLabelValues("token").Inc()
 		return entry.(*cacheEntry).context, entry.(*cacheEntry).endpointURL, nil
 	}
 	keystoneCacheMisses.WithLabelValues("token").Inc()
@@ -710,8 +711,10 @@ func (d *keystone) ChildProjects(ctx context.Context, projectID string) ([]strin
 		cached := ce.([]string)
 		keystoneCacheHits.WithLabelValues("project_tree").Inc()
 		logg.Debug("[CHILD_PROJECTS_DEBUG] [%s-keystone] Cache hit for %s: %v", keystoneContext, projectID, cached)
+		keystoneCacheHits.WithLabelValues("project_tree").Inc()
 		return cached, nil
 	}
+	keystoneCacheMisses.WithLabelValues("project_tree").Inc()
 
 	keystoneCacheMisses.WithLabelValues("project_tree").Inc()
 
