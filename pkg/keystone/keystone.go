@@ -711,11 +711,8 @@ func (d *keystone) ChildProjects(ctx context.Context, projectID string) ([]strin
 		cached := ce.([]string)
 		keystoneCacheHits.WithLabelValues("project_tree").Inc()
 		logg.Debug("[CHILD_PROJECTS_DEBUG] [%s-keystone] Cache hit for %s: %v", keystoneContext, projectID, cached)
-		keystoneCacheHits.WithLabelValues("project_tree").Inc()
 		return cached, nil
 	}
-	keystoneCacheMisses.WithLabelValues("project_tree").Inc()
-
 	keystoneCacheMisses.WithLabelValues("project_tree").Inc()
 
 	logg.Debug("[CHILD_PROJECTS_DEBUG] [%s-keystone] Cache miss for %s, fetching from keystone", keystoneContext, projectID)
