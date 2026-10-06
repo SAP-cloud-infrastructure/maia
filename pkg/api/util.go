@@ -602,14 +602,22 @@ func gaugeInflight(handler http.Handler) http.Handler {
 	return promhttp.InstrumentHandlerInFlight(inflightGauge, handler)
 }
 
+// countRequests increments requestsTotal with the response code. It is wired
+// OUTSIDE authorize() at the call sites so that auth rejections (401/403) are
+// counted too — otherwise the counter would miss exactly the failures an error
+// rate needs.
 func countRequests(handlerFunc http.HandlerFunc, handler string) http.HandlerFunc {
 	curried := requestsTotal.MustCurryWith(prometheus.Labels{"handler": handler})
 	return promhttp.InstrumentHandlerCounter(curried, handlerFunc)
 }
 
 func observeDuration(handlerFunc http.HandlerFunc, handler string) http.HandlerFunc {
+	// Explicit buckets with a boundary at 3s so the OpenstackMaiaResponsiveness
+	// alert (p99 > 3) reads a real bucket edge instead of interpolating across the
+	// DefBuckets gap between 2.5 and 5. The 30s/60s tail keeps resolution for slow
+	// query_range calls that would otherwise all land in +Inf.
 	durationHistogram := prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{Name: "maia_request_duration_seconds", Help: "Duration/latency of a Maia request", Buckets: prometheus.DefBuckets, ConstLabels: prometheus.Labels{"handler": handler}}, nil)
+		prometheus.HistogramOpts{Name: "maia_request_duration_seconds", Help: "Duration/latency of a Maia request", Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 3, 5, 10, 30, 60}, ConstLabels: prometheus.Labels{"handler": handler}}, nil)
 	prometheus.MustRegister(durationHistogram)
 
 	return promhttp.InstrumentHandlerDuration(durationHistogram, handlerFunc)
