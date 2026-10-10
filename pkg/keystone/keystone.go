@@ -581,6 +581,7 @@ func (d *keystone) authenticate(ctx context.Context, authOpts gophercloud.AuthOp
 
 	// check cache, but ignore the result if tokens are rescoped
 	if entry, found := d.tokenCache.Get(cacheKey); found && !rescope && (authOpts.Scope == nil || authOpts.Scope.ProjectID == entry.(*cacheEntry).context.Auth["project_id"]) {
+		keystoneCacheHits.WithLabelValues("token").Inc()
 		if authOpts.TokenID != "" {
 			logg.Debug("[%s-keystone] Token cache hit: token %s... for scope %+v", keystoneContext, authOpts.TokenID[:1+len(authOpts.TokenID)/4], authOpts.Scope)
 		} else {
@@ -588,6 +589,7 @@ func (d *keystone) authenticate(ctx context.Context, authOpts gophercloud.AuthOp
 		}
 		return entry.(*cacheEntry).context, entry.(*cacheEntry).endpointURL, nil
 	}
+	keystoneCacheMisses.WithLabelValues("token").Inc()
 
 	var tokenData keystoneToken
 	var endpointURL string
@@ -706,9 +708,11 @@ func (d *keystone) ChildProjects(ctx context.Context, projectID string) ([]strin
 
 	if ce, ok := d.projectTreeCache.Get(projectID); ok {
 		cached := ce.([]string)
+		keystoneCacheHits.WithLabelValues("project_tree").Inc()
 		logg.Debug("[CHILD_PROJECTS_DEBUG] [%s-keystone] Cache hit for %s: %v", keystoneContext, projectID, cached)
 		return cached, nil
 	}
+	keystoneCacheMisses.WithLabelValues("project_tree").Inc()
 
 	logg.Debug("[CHILD_PROJECTS_DEBUG] [%s-keystone] Cache miss for %s, fetching from keystone", keystoneContext, projectID)
 	childprojects, err := d.fetchChildProjects(ctx, projectID)
@@ -754,8 +758,10 @@ func (d *keystone) fetchChildProjects(ctx context.Context, projectID string) ([]
 
 func (d *keystone) UserProjects(ctx context.Context, userID string) ([]tokens.Scope, error) {
 	if up, ok := d.userProjectsCache.Get(userID); ok {
+		keystoneCacheHits.WithLabelValues("user_projects").Inc()
 		return up.([]tokens.Scope), nil
 	}
+	keystoneCacheMisses.WithLabelValues("user_projects").Inc()
 
 	up, err := d.fetchUserProjects(ctx, userID)
 	if err != nil {
@@ -785,6 +791,7 @@ func (d *keystone) fetchUserProjects(ctx context.Context, userID string) ([]toke
 			if _, ok := d.monitoringRoles[ra.Role.ID]; ok && ra.Scope.Project.ID != "" {
 				scope, ok := d.projectScopeCache.Get(ra.Scope.Project.ID)
 				if !ok {
+					keystoneCacheMisses.WithLabelValues("project_scope").Inc()
 					scope = tokens.Scope{
 						ProjectID:   ra.Scope.Project.ID,
 						ProjectName: ra.Scope.Project.Name,
@@ -798,6 +805,8 @@ func (d *keystone) fetchUserProjects(ctx context.Context, userID string) ([]toke
 					} else {
 						d.projectScopeCache.Set(ra.Scope.Project.ID, scope, cache.DefaultExpiration)
 					}
+				} else {
+					keystoneCacheHits.WithLabelValues("project_scope").Inc()
 				}
 				scopes = append(scopes, scope.(tokens.Scope))
 			}
@@ -814,8 +823,10 @@ func (d *keystone) fetchUserProjects(ctx context.Context, userID string) ([]toke
 func (d *keystone) UserID(ctx context.Context, username, userDomain string) (string, error) {
 	key := username + "@" + userDomain
 	if ce, ok := d.userIDCache.Get(key); ok {
+		keystoneCacheHits.WithLabelValues("user_id").Inc()
 		return ce.(string), nil
 	}
+	keystoneCacheMisses.WithLabelValues("user_id").Inc()
 
 	id, err := d.fetchUserID(ctx, username, userDomain)
 	if err != nil {
