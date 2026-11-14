@@ -47,7 +47,7 @@ jobs:
   scan-vendored-ui:
     # Pinned to v2.5.0 by full commit SHA, consistent with the repo's other
     # workflows. Bump the SHA and the trailing version comment together.
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@32d3cd482bdadfb38b186c0ad1b031902d55d932 # v2.7.1
     with:
       # Scope the scan to the vendored fork's JS lockfile only. The Go module
       # tree is already covered by Renovate's osvVulnerabilityAlerts, so a bare
