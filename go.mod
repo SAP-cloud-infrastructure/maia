@@ -13,7 +13,7 @@ require (
 	github.com/prometheus/common v0.74.0
 	github.com/prometheus/prometheus v0.316.0
 	github.com/rs/cors v1.11.1
-	github.com/sapcc/go-bits v0.0.0-20261119170052-2c0267f1a934
+	github.com/sapcc/go-bits v0.0.0-20261126170205-c4438fd89447
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1
